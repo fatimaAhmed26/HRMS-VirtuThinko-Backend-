@@ -1,11 +1,11 @@
-require('dotenv').config();
-const { PrismaClient } = require('@prisma/client');
-const bcrypt = require('bcryptjs');
+import 'dotenv/config';
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 // module -> actions  (permission name = "module:action")
-const PERMISSIONS = {
+const PERMISSIONS: Record<string, string[]> = {
   employee:     ['view', 'create', 'edit', 'deactivate', 'export'],
   department:   ['view', 'manage'],
   leave:        ['view', 'request', 'approve', 'manage'],
@@ -21,15 +21,12 @@ const PERMISSIONS = {
   settings:     ['manage'],
 };
 
-const ALL = Object.entries(PERMISSIONS).flatMap(([mod, actions]) =>
-  actions.map((a) => `${mod}:${a}`)
-);
-const all = (mod) => ALL.filter((p) => p.startsWith(`${mod}:`));
+const ALL = Object.entries(PERMISSIONS).flatMap(([mod, actions]) => actions.map((a) => `${mod}:${a}`));
+const all = (mod: string) => ALL.filter((p) => p.startsWith(`${mod}:`));
 
-// Employee-level permissions every staff role also needs
 const SELF = ['leave:request', 'request:create', 'document:upload', 'announcement:view'];
 
-const ROLES = {
+const ROLES: Record<string, { description: string; perms: string[] }> = {
   'Super Admin': { description: 'Full system access', perms: ALL },
   'HR Admin': {
     description: 'Employees, leave, payroll, contracts, documents',
@@ -55,29 +52,23 @@ const ROLES = {
 };
 
 async function main() {
-  // 1. permissions
   for (const name of ALL) {
     await prisma.permission.upsert({ where: { name }, update: {}, create: { name } });
   }
 
-  // 2. roles + their permissions
   for (const [name, { description, perms }] of Object.entries(ROLES)) {
     const role = await prisma.role.upsert({
       where: { name },
       update: { description },
       create: { name, description },
     });
-
-    const permRows = await prisma.permission.findMany({
-      where: { name: { in: [...new Set(perms)] } },
-    });
+    const permRows = await prisma.permission.findMany({ where: { name: { in: [...new Set(perms)] } } });
     await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
     await prisma.rolePermission.createMany({
       data: permRows.map((p) => ({ roleId: role.id, permissionId: p.id })),
     });
   }
 
-  // 3. super admin user
   const email = process.env.SEED_ADMIN_EMAIL;
   const password = process.env.SEED_ADMIN_PASSWORD;
   if (!email || !password) throw new Error('Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD in .env');
@@ -88,7 +79,7 @@ async function main() {
     create: { username: 'superadmin', email, passwordHash: await bcrypt.hash(password, 12) },
   });
 
-  const superRole = await prisma.role.findUnique({ where: { name: 'Super Admin' } });
+  const superRole = await prisma.role.findUniqueOrThrow({ where: { name: 'Super Admin' } });
   await prisma.userRole.upsert({
     where: { userId_roleId: { userId: admin.id, roleId: superRole.id } },
     update: {},
@@ -99,5 +90,8 @@ async function main() {
 }
 
 main()
-  .catch((e) => { console.error(e); process.exit(1); })
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
   .finally(() => prisma.$disconnect());
