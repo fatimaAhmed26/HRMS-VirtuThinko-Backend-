@@ -123,3 +123,19 @@ model Employee {
 
   @@map("employees")
 }
+// ─────────── Audit ───────────
+
+model AuditLog {
+  id          Int      @id @default(autoincrement()) @map("audit_id")
+  actorUserId Int?     @map("actor_user_id")
+  action      String   @db.VarChar(50)
+  entity      String   @db.VarChar(50)
+  entityId    String   @map("entity_id") @db.VarChar(50)
+  changes     Json?
+  ip          String?  @db.VarChar(45)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([entity, entityId])
+  @@index([actorUserId])
+  @@map("audit_logs")
+}
