@@ -105,6 +105,7 @@ model Employee {
   hireDate       DateTime? @map("hire_date") @db.Date
   probationEnd   DateTime? @map("probation_end") @db.Date
   status         String    @default("active") @db.VarChar(20)
+  country        String    @default("BH") @db.VarChar(2)
 
   bankName          String? @map("bank_name") @db.VarChar(100)
   bankAccountNumber String? @map("bank_account_number") @db.VarChar(255)
@@ -120,6 +121,7 @@ model Employee {
   manager            Employee?    @relation("EmployeeManager", fields: [managerId], references: [id])
   directReports      Employee[]   @relation("EmployeeManager")
   user               User?
+   leaveRequests      LeaveRequest[]
 
   @@map("employees")
 }
@@ -138,4 +140,79 @@ model AuditLog {
   @@index([entity, entityId])
   @@index([actorUserId])
   @@map("audit_logs")
+}
+
+// ─────────── Leave ───────────
+
+model LeaveType {
+  id                 Int     @id @default(autoincrement()) @map("leave_type_id")
+  country            String  @db.VarChar(2)                    // BH | SA
+  code               String  @db.VarChar(30)                   // ANNUAL, SICK, MATERNITY...
+  name               String  @db.VarChar(100)
+  description        String? @db.VarChar(255)
+  allowance          String  @db.VarChar(10)                   // "yearly" (balance per year) | "per_event"
+  days               Int                                       // days per year, or per event
+  daysAfterYears     Int?    @map("days_after_years")          // e.g. 5  (Saudi: 30 days after 5 years)
+  daysAfter          Int?    @map("days_after")                // e.g. 30
+  accrueFirstYear    Boolean @default(false) @map("accrue_first_year") // Bahrain: 2.5 days/month in year 1
+  payTiers           Json?   @map("pay_tiers")                 // [{"days":15,"payPercent":100},...]; null = fully paid
+  minServiceMonths   Int     @default(0) @map("min_service_months")
+  gender             String? @db.VarChar(10)                   // Male | Female | null = everyone
+  oncePerEmployment  Boolean @default(false) @map("once_per_employment")
+  requiresAttachment Boolean @default(false) @map("requires_attachment")
+  countWorkingDays   Boolean @default(false) @map("count_working_days") // skip Fri/Sat + public holidays
+  active             Boolean @default(true)
+
+  requests LeaveRequest[]
+
+  @@unique([country, code])
+  @@map("leave_types")
+}
+
+model LeaveRequest {
+  id            Int      @id @default(autoincrement()) @map("leave_request_id")
+  employeeId    Int      @map("employee_id")
+  leaveTypeId   Int      @map("leave_type_id")
+  startDate     DateTime @map("start_date") @db.Date
+  endDate       DateTime @map("end_date") @db.Date
+  days          Int
+  reason        String?  @db.VarChar(500)
+  attachmentUrl String?  @map("attachment_url") @db.VarChar(255)
+  status        String   @default("pending_manager") @db.VarChar(20) // pending_manager | pending_hr | approved | rejected | cancelled
+  payBreakdown  Json?    @map("pay_breakdown")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  employee  Employee        @relation(fields: [employeeId], references: [id])
+  leaveType LeaveType       @relation(fields: [leaveTypeId], references: [id])
+  approvals LeaveApproval[]
+
+  @@index([employeeId, status])
+  @@index([status])
+  @@map("leave_requests")
+}
+
+model LeaveApproval {
+  id             Int      @id @default(autoincrement()) @map("leave_approval_id")
+  requestId      Int      @map("leave_request_id")
+  stage          String   @db.VarChar(20) // manager | hr
+  decision       String   @db.VarChar(20) // approved | rejected
+  comment        String?  @db.VarChar(500)
+  approverUserId Int      @map("approver_user_id")
+  approverName   String   @map("approver_name") @db.VarChar(100)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  request LeaveRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@map("leave_approvals")
+}
+
+model PublicHoliday {
+  id      Int      @id @default(autoincrement()) @map("holiday_id")
+  country String   @db.VarChar(2)
+  date    DateTime @db.Date
+  name    String   @db.VarChar(100)
+
+  @@unique([country, date])
+  @@map("public_holidays")
 }
