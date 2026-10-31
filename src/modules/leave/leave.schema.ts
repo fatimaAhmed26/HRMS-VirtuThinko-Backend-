@@ -17,7 +17,7 @@ export const decisionSchema = z.object({
 });
 
 export const rejectSchema = z.object({
-  comment: z.string().trim().min(1, 'A reason is required when rejecting').max(500),
+  comment: z.string({ error: 'A reason is required when rejecting' }).trim().min(1, 'A reason is required when rejecting').max(500),
 });
 
 export const listQuerySchema = z.object({
