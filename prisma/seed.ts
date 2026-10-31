@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-
+import { LEAVE_TYPES } from './leave-types';
 const prisma = new PrismaClient();
 
 // module -> actions  (permission name = "module:action")
@@ -87,6 +87,30 @@ async function main() {
   });
 
   console.log(`Seeded ${ALL.length} permissions, ${Object.keys(ROLES).length} roles, admin: ${email}`);
+  for (const t of LEAVE_TYPES) {
+    await prisma.leaveType.upsert({
+      where: { country_code: { country: t.country, code: t.code } },
+      update: {},
+      create: {
+        country: t.country,
+        code: t.code,
+        name: t.name,
+        description: t.description ?? null,
+        allowance: t.allowance,
+        days: t.days,
+        daysAfterYears: t.daysAfterYears ?? null,
+        daysAfter: t.daysAfter ?? null,
+        accrueFirstYear: t.accrueFirstYear ?? false,
+        payTiers: t.payTiers ?? undefined,
+        minServiceMonths: t.minServiceMonths ?? 0,
+        gender: t.gender ?? null,
+        oncePerEmployment: t.oncePerEmployment ?? false,
+        requiresAttachment: t.requiresAttachment ?? false,
+        countWorkingDays: t.countWorkingDays ?? false,
+      },
+    });
+  }
+  console.log(`Seeded ${LEAVE_TYPES.length} leave types`);
 }
 
 main()
