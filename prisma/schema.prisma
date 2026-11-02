@@ -121,10 +121,12 @@ model Employee {
   manager            Employee?    @relation("EmployeeManager", fields: [managerId], references: [id])
   directReports      Employee[]   @relation("EmployeeManager")
   user               User?
-   leaveRequests      LeaveRequest[]
+  leaveRequests      LeaveRequest[]
+  documents          Document[]
 
   @@map("employees")
 }
+
 // ─────────── Audit ───────────
 
 model AuditLog {
@@ -177,15 +179,16 @@ model LeaveRequest {
   endDate       DateTime @map("end_date") @db.Date
   days          Int
   reason        String?  @db.VarChar(500)
-  attachmentUrl String?  @map("attachment_url") @db.VarChar(255)
+  attachmentId  Int?     @map("attachment_id")
   status        String   @default("pending_manager") @db.VarChar(20) // pending_manager | pending_hr | approved | rejected | cancelled
   payBreakdown  Json?    @map("pay_breakdown")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  employee  Employee        @relation(fields: [employeeId], references: [id])
-  leaveType LeaveType       @relation(fields: [leaveTypeId], references: [id])
-  approvals LeaveApproval[]
+  employee   Employee        @relation(fields: [employeeId], references: [id])
+  leaveType  LeaveType       @relation(fields: [leaveTypeId], references: [id])
+  attachment Document?       @relation(fields: [attachmentId], references: [id])
+  approvals  LeaveApproval[]
 
   @@index([employeeId, status])
   @@index([status])
@@ -215,4 +218,29 @@ model PublicHoliday {
 
   @@unique([country, date])
   @@map("public_holidays")
+}
+
+// ─────────── Documents / uploads ───────────
+
+model Document {
+  id                Int       @id @default(autoincrement()) @map("document_id")
+  employeeId        Int       @map("employee_id")
+  category          String    @db.VarChar(30)                      // leave_attachment | id_copy | certificate | contract | personal | other
+  title             String    @db.VarChar(150)
+  originalName      String    @map("original_name") @db.VarChar(255)
+  storedName        String    @unique @map("stored_name") @db.VarChar(100) // random name on disk
+  mimeType          String    @map("mime_type") @db.VarChar(50)
+  size              Int                                            // bytes
+  expiryDate        DateTime? @map("expiry_date") @db.Date         // e.g. passport / CPR copy
+  visibleToEmployee Boolean   @default(true) @map("visible_to_employee")
+  uploadedByUserId  Int       @map("uploaded_by_user_id")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  deletedAt         DateTime? @map("deleted_at")                   // soft delete (file kept for retention)
+
+  employee      Employee       @relation(fields: [employeeId], references: [id])
+  leaveRequests LeaveRequest[]
+
+  @@index([employeeId, category])
+  @@index([expiryDate])
+  @@map("documents")
 }
