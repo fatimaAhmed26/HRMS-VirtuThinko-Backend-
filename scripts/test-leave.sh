@@ -76,8 +76,9 @@ echo; echo "=== Sara sick leave without certificate (should be 400) ==="
 curl -s -X POST $API/leave/requests -H "$SARA" -H "$JSON" -d "{\"leaveTypeId\":$BH_SICK,\"startDate\":\"2026-11-10\",\"endDate\":\"2026-11-27\"}" | show
 
 echo; echo "=== Sara sick leave 18 days (Bahrain: 15 full pay, then half pay) ==="
-curl -s -X POST $API/leave/requests -H "$SARA" -H "$JSON" -d "{\"leaveTypeId\":$BH_SICK,\"startDate\":\"2026-11-10\",\"endDate\":\"2026-11-27\",\"attachmentUrl\":\"medical.pdf\"}" > /tmp/sara_req.json
-show < /tmp/sara_req.json
+printf '%%PDF-1.4\n%%sick note\n' > /tmp/note.pdf
+NOTE=$(curl -s -X POST $API/documents -H "$SARA" -F "file=@/tmp/note.pdf" -F "category=leave_attachment" | get .id)
+curl -s -X POST $API/leave/requests -H "$SARA" -H "$JSON" -d "{\"leaveTypeId\":$BH_SICK,\"startDate\":\"2026-11-10\",\"endDate\":\"2026-11-27\",\"attachmentId\":$NOTE}" > /tmp/sara_req.jsonshow < /tmp/sara_req.json
 SREQ=$(get .id < /tmp/sara_req.json)
 
 echo; echo "=== HR rejects without a reason (should be 400) ==="
