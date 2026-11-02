@@ -106,7 +106,8 @@ model Employee {
   probationEnd   DateTime? @map("probation_end") @db.Date
   status         String    @default("active") @db.VarChar(20)
   country        String    @default("BH") @db.VarChar(2)
-
+  isNational     Boolean   @default(false) @map("is_national")    
+  siNewScheme    Boolean   @default(false) @map("si_new_scheme")  
   bankName          String? @map("bank_name") @db.VarChar(100)
   bankAccountNumber String? @map("bank_account_number") @db.VarChar(255)
 
@@ -123,6 +124,9 @@ model Employee {
   user               User?
   leaveRequests      LeaveRequest[]
   documents          Document[]
+  contracts          Contract[]
+  payItems           PayItem[]
+  payslips           Payslip[]
 
   @@map("employees")
 }
@@ -239,8 +243,119 @@ model Document {
 
   employee      Employee       @relation(fields: [employeeId], references: [id])
   leaveRequests LeaveRequest[]
+  contracts     Contract[]
 
   @@index([employeeId, category])
   @@index([expiryDate])
   @@map("documents")
+}
+
+// ─────────── Contracts ───────────
+
+model Contract {
+  id                 Int       @id @default(autoincrement()) @map("contract_id")
+  employeeId         Int       @map("employee_id")
+  contractType       String    @map("contract_type") @db.VarChar(20)   // unlimited | limited
+  startDate          DateTime  @map("start_date") @db.Date
+  endDate            DateTime? @map("end_date") @db.Date               // null for unlimited
+  basicSalary        Decimal   @map("basic_salary") @db.Decimal(12, 3)
+  housingAllowance   Decimal   @default(0) @map("housing_allowance") @db.Decimal(12, 3)
+  transportAllowance Decimal   @default(0) @map("transport_allowance") @db.Decimal(12, 3)
+  currency           String    @db.VarChar(3)                          // BHD | SAR
+  status             String    @default("active") @db.VarChar(20)      // active | expired
+  documentId         Int?      @map("document_id")                     // signed contract PDF
+  notes              String?   @db.VarChar(500)
+  createdByUserId    Int       @map("created_by_user_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  employee Employee  @relation(fields: [employeeId], references: [id])
+  document Document? @relation(fields: [documentId], references: [id])
+  payslips Payslip[]
+
+  @@index([employeeId, status])
+  @@index([endDate])
+  @@map("contracts")
+}
+
+// ─────────── Payroll ───────────
+
+model PayItemType {
+  id           Int     @id @default(autoincrement()) @map("pay_item_type_id")
+  code         String  @unique @db.VarChar(30)       // BONUS, OVERTIME, LOAN...
+  name         String  @db.VarChar(100)
+  kind         String  @db.VarChar(10)               // earning | deduction
+  contributory Boolean @default(false)               // counts toward the social insurance base
+  active       Boolean @default(true)
+
+  items PayItem[]
+
+  @@map("pay_item_types")
+}
+
+model PayItem {
+  id               Int       @id @default(autoincrement()) @map("pay_item_id")
+  employeeId       Int       @map("employee_id")
+  typeId           Int       @map("type_id")
+  amount           Decimal   @db.Decimal(12, 3)
+  recurring        Boolean   @default(false)
+  fromPeriod       String    @map("from_period") @db.VarChar(7)   // "2026-11"
+  toPeriod         String?   @map("to_period") @db.VarChar(7)     // recurring end (null = open); one-time = fromPeriod
+  reason           String?   @db.VarChar(255)
+  status           String    @default("pending") @db.VarChar(20)  // pending | approved | rejected
+  createdByUserId  Int       @map("created_by_user_id")
+  approvedByUserId Int?      @map("approved_by_user_id")
+  approvedAt       DateTime? @map("approved_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  employee Employee    @relation(fields: [employeeId], references: [id])
+  type     PayItemType @relation(fields: [typeId], references: [id])
+
+  @@index([employeeId, status])
+  @@map("pay_items")
+}
+
+model PayrollRun {
+  id               Int       @id @default(autoincrement()) @map("payroll_run_id")
+  period           String    @unique @db.VarChar(7)               // "2026-11"
+  status           String    @default("draft") @db.VarChar(20)    // draft | under_review | approved | processed | paid
+  warnings         Json?                                          // employees skipped / needing review
+  createdByUserId  Int       @map("created_by_user_id")
+  approvedByUserId Int?      @map("approved_by_user_id")
+  approvedAt       DateTime? @map("approved_at")
+  processedAt      DateTime? @map("processed_at")
+  paidAt           DateTime? @map("paid_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  payslips Payslip[]
+
+  @@map("payroll_runs")
+}
+
+model Payslip {
+  id                    Int      @id @default(autoincrement()) @map("payslip_id")
+  runId                 Int      @map("payroll_run_id")
+  employeeId            Int      @map("employee_id")
+  contractId            Int      @map("contract_id")
+  employeeCode          String   @map("employee_code") @db.VarChar(20)
+  employeeName          String   @map("employee_name") @db.VarChar(110)
+  department            String?  @db.VarChar(100)
+  jobTitle              String?  @map("job_title") @db.VarChar(100)
+  country               String   @db.VarChar(2)
+  currency              String   @db.VarChar(3)
+  basicSalary           Decimal  @map("basic_salary") @db.Decimal(12, 3)
+  earnings              Json                                         // [{code,name,amount,source,note}]
+  deductions            Json
+  employerContributions Json     @map("employer_contributions")
+  grossSalary           Decimal  @map("gross_salary") @db.Decimal(12, 3)
+  totalDeductions       Decimal  @map("total_deductions") @db.Decimal(12, 3)
+  netSalary             Decimal  @map("net_salary") @db.Decimal(12, 3)
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  run      PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  employee Employee   @relation(fields: [employeeId], references: [id])
+  contract Contract   @relation(fields: [contractId], references: [id])
+
+  @@unique([runId, employeeId])
+  @@map("payslips")
 }
