@@ -8,16 +8,15 @@ import type { CreateRequestInput, ListRequestsQuery, UpdateTypeInput } from './l
 
 const ACTIVE_STATUSES = ['pending_manager', 'pending_hr', 'approved'];
 const PENDING_STATUSES = ['pending_manager', 'pending_hr'];
-
 const requestInclude = {
   employee: {
     select: { id: true, employeeCode: true, firstName: true, lastName: true, managerId: true, country: true,
       department: { select: { id: true, name: true } } },
   },
   leaveType: { select: { id: true, code: true, name: true, country: true } },
+  attachment: { select: { id: true, originalName: true, mimeType: true, size: true } },
   approvals: { orderBy: { createdAt: 'asc' } },
 } satisfies Prisma.LeaveRequestInclude;
-
 const canManage = (u: AuthUser) => u.permissions.includes('leave:manage');
 
 function requireEmployee(user: AuthUser) {
@@ -105,7 +104,6 @@ export async function balances(employeeId: number, year = new Date().getUTCFullY
       const { approved, pending } = await usedDays(emp.id, t.id, year);
       result.push({
         leaveTypeId: t.id, code: t.code, name: t.name, allowance: t.allowance,
-        attachment: { select: { id: true, originalName: true, mimeType: true, size: true } },
         entitlement, used: approved, pending, remaining: entitlement - approved - pending,
         payTiers: t.payTiers,
       });
