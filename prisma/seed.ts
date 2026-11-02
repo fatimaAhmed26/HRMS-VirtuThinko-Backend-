@@ -54,10 +54,12 @@ const ROLES: Record<string, { description: string; perms: string[] }> = {
 };
 
 async function main() {
+  // 1. permissions
   for (const name of ALL) {
     await prisma.permission.upsert({ where: { name }, update: {}, create: { name } });
   }
 
+  // 2. roles + their permissions
   for (const [name, { description, perms }] of Object.entries(ROLES)) {
     const role = await prisma.role.upsert({
       where: { name },
@@ -71,6 +73,7 @@ async function main() {
     });
   }
 
+  // 3. super admin user
   const email = process.env.SEED_ADMIN_EMAIL;
   const password = process.env.SEED_ADMIN_PASSWORD;
   if (!email || !password) throw new Error('Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD in .env');
@@ -87,8 +90,9 @@ async function main() {
     update: {},
     create: { userId: admin.id, roleId: superRole.id },
   });
-
   console.log(`Seeded ${ALL.length} permissions, ${Object.keys(ROLES).length} roles, admin: ${email}`);
+
+  // 4. leave types (existing rows are kept, so HR edits aren't overwritten)
   for (const t of LEAVE_TYPES) {
     await prisma.leaveType.upsert({
       where: { country_code: { country: t.country, code: t.code } },
@@ -113,6 +117,12 @@ async function main() {
     });
   }
   console.log(`Seeded ${LEAVE_TYPES.length} leave types`);
+
+  // 5. allowance & deduction categories
+  for (const t of PAY_ITEM_TYPES) {
+    await prisma.payItemType.upsert({ where: { code: t.code }, update: {}, create: { ...t } });
+  }
+  console.log(`Seeded ${PAY_ITEM_TYPES.length} pay item types`);
 }
 
 main()
@@ -121,8 +131,3 @@ main()
     process.exit(1);
   })
   .finally(() => prisma.$disconnect());
-    // 5. allowance & deduction categories
-  for (const t of PAY_ITEM_TYPES) {
-    await prisma.payItemType.upsert({ where: { code: t.code }, update: {}, create: { ...t } });
-  }
-  console.log(`Seeded ${PAY_ITEM_TYPES.length} pay item types`);
