@@ -2,6 +2,8 @@ import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { LEAVE_TYPES } from './leave-types';
+import { PAY_ITEM_TYPES } from './pay-item-types';
+
 const prisma = new PrismaClient();
 
 // module -> actions  (permission name = "module:action")
@@ -119,3 +121,8 @@ main()
     process.exit(1);
   })
   .finally(() => prisma.$disconnect());
+    // 5. allowance & deduction categories
+  for (const t of PAY_ITEM_TYPES) {
+    await prisma.payItemType.upsert({ where: { code: t.code }, update: {}, create: { ...t } });
+  }
+  console.log(`Seeded ${PAY_ITEM_TYPES.length} pay item types`);
