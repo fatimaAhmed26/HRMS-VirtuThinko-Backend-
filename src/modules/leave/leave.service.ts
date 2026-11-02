@@ -105,6 +105,7 @@ export async function balances(employeeId: number, year = new Date().getUTCFullY
       const { approved, pending } = await usedDays(emp.id, t.id, year);
       result.push({
         leaveTypeId: t.id, code: t.code, name: t.name, allowance: t.allowance,
+        attachment: { select: { id: true, originalName: true, mimeType: true, size: true } },
         entitlement, used: approved, pending, remaining: entitlement - approved - pending,
         payTiers: t.payTiers,
       });
@@ -143,7 +144,11 @@ export async function createRequest(input: CreateRequestInput, user: AuthUser, i
       throw new HttpError(400, `${type.name} requires ${type.minServiceMonths} months of service (you have ${months})`);
     }
   }
-  if (type.requiresAttachment && !input.attachmentUrl) throw new HttpError(400, `${type.name} requires a supporting document`);
+  if (type.requiresAttachment && !input.attachmentId) throw new HttpError(400, `${type.name} requires a supporting document`);
+  if (input.attachmentId) {
+    const doc = await prisma.document.findFirst({ where: { id: input.attachmentId, deletedAt: null } });
+    if (!doc || doc.employeeId !== employeeId) throw new HttpError(400, 'Attachment not found - upload it first via /api/documents');
+  }
   if (type.oncePerEmployment) {
     const before = await prisma.leaveRequest.count({ where: { employeeId, leaveTypeId: type.id, status: { in: ACTIVE_STATUSES } } });
     if (before > 0) throw new HttpError(400, `${type.name} can only be taken once during employment`);
@@ -184,7 +189,7 @@ export async function createRequest(input: CreateRequestInput, user: AuthUser, i
     const r = await tx.leaveRequest.create({
       data: {
         employeeId, leaveTypeId: type.id, startDate: input.startDate, endDate: input.endDate,
-        days, reason: input.reason, attachmentUrl: input.attachmentUrl, status, payBreakdown: breakdown,
+        days, reason: input.reason, attachmentId: input.attachmentId, status, payBreakdown: breakdown,
       },
       include: requestInclude,
     });

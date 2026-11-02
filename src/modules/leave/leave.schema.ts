@@ -8,7 +8,7 @@ export const createRequestSchema = z
     startDate: isoDate,
     endDate: isoDate,
     reason: z.string().trim().max(500).optional(),
-    attachmentUrl: z.string().trim().max(255).optional(),
+    attachmentId: z.number().int().positive().optional(),
   })
   .refine((v) => v.endDate >= v.startDate, { message: 'End date must be on or after start date', path: ['endDate'] });
 
