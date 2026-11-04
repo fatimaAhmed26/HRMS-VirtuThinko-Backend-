@@ -26,6 +26,8 @@ export const createEmployeeSchema = z.object({
   employmentType: z.enum(['Full-time', 'Part-time', 'Contract', 'Intern']).optional().nullable(),
   workLocation: text(100),
   country: z.enum(['BH', 'SA']).optional(),
+  isNational: z.boolean().optional(),
+  siNewScheme: z.boolean().optional(),
   hireDate: date,
   probationEnd: date,
 
