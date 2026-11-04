@@ -1,10 +1,14 @@
+// Payslip PDF (requirements section 13: company & employee details, month, earnings, deductions, gross, net)
 import PDFDocument from 'pdfkit';
 import type { Writable } from 'stream';
 import { periodLabel } from './payroll.rules';
+import { BRAND, INK, MUTED, RULE, drawLetterhead } from '../../utils/pdf';
+import type { CompanyInfo } from '../../utils/settings';
 
 interface Line { name: string; amount: string; note?: string; rate?: number }
 
 export interface PayslipPdfData {
+  company: CompanyInfo;
   period: string;
   employeeCode: string;
   employeeName: string;
@@ -19,31 +23,15 @@ export interface PayslipPdfData {
   generatedAt: Date;
 }
 
-const BRAND = '#C00020';   
-const INK = '#1F2328';
-const MUTED = '#6B7280';
-const RULE = '#E5E7EB';
-
 export function writePayslipPdf(data: PayslipPdfData, out: Writable) {
-  const company = process.env.COMPANY_NAME || 'Company';
-  const address = process.env.COMPANY_ADDRESS || '';
   const doc = new PDFDocument({ size: 'A4', margin: 50, info: { Title: `Payslip ${data.period} ${data.employeeCode}` } });
   doc.pipe(out);
 
   const left = 50;
   const width = doc.page.width - 100;
-
-  // header band
-  doc.rect(0, 0, doc.page.width, 6).fill(BRAND);
-  doc.fillColor(INK).font('Helvetica-Bold').fontSize(18).text(company, left, 40);
-  if (address) doc.font('Helvetica').fontSize(9).fillColor(MUTED).text(address);
-  doc.font('Helvetica-Bold').fontSize(12).fillColor(BRAND).text('PAYSLIP', left, 40, { width, align: 'right' });
-  doc.font('Helvetica').fontSize(10).fillColor(INK).text(periodLabel(data.period), left, 58, { width, align: 'right' });
+  let y = drawLetterhead(doc, data.company, 'Payslip', periodLabel(data.period));
 
   // employee details
-  let y = 100;
-  doc.moveTo(left, y).lineTo(left + width, y).strokeColor(RULE).stroke();
-  y += 12;
   const field = (label: string, value: string, x: number, yy: number) => {
     doc.font('Helvetica').fontSize(8).fillColor(MUTED).text(label.toUpperCase(), x, yy);
     doc.font('Helvetica-Bold').fontSize(10).fillColor(INK).text(value || '-', x, yy + 11);
