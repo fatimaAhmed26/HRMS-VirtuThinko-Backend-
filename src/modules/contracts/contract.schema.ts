@@ -7,20 +7,26 @@ export const createContractSchema = z
   .object({
     employeeId: z.number().int().positive(),
     contractType: z.enum(['unlimited', 'limited']),
+    jobTitle: z.string().trim().max(100).optional(),
     startDate: isoDate,
     endDate: isoDate.optional(),
     basicSalary: money.refine((v) => v > 0, 'Basic salary is required'),
     housingAllowance: money.default(0),
     transportAllowance: money.default(0),
+    weeklyHours: z.number().int().min(1).max(60).optional(),
     documentId: z.number().int().positive().optional(), // signed contract uploaded via /api/documents
     notes: z.string().trim().max(500).optional(),
   })
   .refine((v) => v.contractType === 'unlimited' || v.endDate, { message: 'Limited contracts need an end date', path: ['endDate'] })
   .refine((v) => !v.endDate || v.endDate > v.startDate, { message: 'End date must be after start date', path: ['endDate'] });
 
+export const terminateSchema = z.object({
+  reason: z.string({ error: 'A reason is required' }).trim().min(1, 'A reason is required').max(500),
+});
+
 export const listQuerySchema = z.object({
   employeeId: z.coerce.number().int().positive().optional(),
-  status: z.enum(['active', 'expired']).optional(),
+  status: z.enum(['active', 'expiring_soon', 'renewed', 'expired', 'terminated']).optional(),
   expiringWithinDays: z.coerce.number().int().min(0).max(365).optional(),
 });
 
