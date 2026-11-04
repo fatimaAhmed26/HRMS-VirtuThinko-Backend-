@@ -57,6 +57,13 @@ export const listQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+export const updateMeSchema = z.object({
+  phone: text(20),
+  address: text(255),
+  emergencyName: text(100),
+  emergencyPhone: text(20),
+});
+
 export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;
 export type UpdateEmployeeInput = z.infer<typeof updateEmployeeSchema>;
 export type ListEmployeesQuery = z.infer<typeof listQuerySchema>;

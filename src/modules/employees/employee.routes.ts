@@ -8,6 +8,7 @@ router.use(authenticate); // every route below needs a logged-in user
 
 router.get('/', requirePermission('employee:view'), c.list);
 router.get('/me', c.me); // must be before '/:id'
+router.patch('/me', c.updateMe);
 router.get('/:id', requirePermission('employee:view'), c.getById);
 router.get('/:id/history', requirePermission('employee:view'), c.history);
 router.post('/', requirePermission('employee:create'), c.create);

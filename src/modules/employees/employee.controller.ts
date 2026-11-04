@@ -1,9 +1,9 @@
 import { Request } from 'express';
 import * as service from './employee.service';
-import { createEmployeeSchema, listQuerySchema, statusSchema, updateEmployeeSchema } from './employee.schema';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { parse } from '../../utils/validate';
 import { HttpError } from '../../utils/httpError';
+import { createEmployeeSchema, listQuerySchema, statusSchema, updateEmployeeSchema, updateMeSchema } from './employee.schema';
 
 function actorFrom(req: Request): service.Actor {
   const perms = req.user!.permissions;
@@ -52,4 +52,11 @@ export const setStatus = asyncHandler(async (req, res) => {
 
 export const history = asyncHandler(async (req, res) => {
   res.json(await service.history(idParam(req)));
+});
+
+export const updateMe = asyncHandler(async (req, res) => {
+  const employeeId = req.user!.employeeId;
+  if (!employeeId) throw new HttpError(404, 'No employee record is linked to this account');
+  const input = parse(updateMeSchema, req.body);
+  res.json(await service.update(employeeId, input, { userId: req.user!.id, ip: req.ip ?? null, canSeeBank: true }));
 });
