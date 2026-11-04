@@ -11,6 +11,8 @@ import userRoutes from './modules/users/user.routes';
 import roleRoutes from './modules/roles/role.routes';
 import leaveRoutes from './modules/leave/leave.routes';
 import documentRoutes from './modules/documents/document.routes';
+import contractRoutes from './modules/contracts/contract.routes';
+import payrollRoutes from './modules/payroll/payroll.routes';
 
 const app = express();
 
@@ -30,6 +32,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/leave', leaveRoutes);
 app.use('/api/documents', documentRoutes);
+app.use('/api/contracts', contractRoutes);
+app.use('/api/payroll', payrollRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {
