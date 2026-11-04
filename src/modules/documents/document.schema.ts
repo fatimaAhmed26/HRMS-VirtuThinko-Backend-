@@ -13,6 +13,7 @@ export const uploadSchema = z.object({
   category: z.enum(CATEGORIES),
   title: z.string().trim().min(1).max(150).optional(),       // default: the file name
   expiryDate: isoDate.optional(),
+    notes: z.string().trim().max(500).optional(),
   visibleToEmployee: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
 });
 
