@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../../config/prisma';
 import { HttpError } from '../../utils/httpError';
 import { logAudit } from '../../utils/audit';
+import { getSettings } from '../../utils/settings';
 import type { AuthUser } from '../../types/express';
 import { CURRENCY } from '../payroll/payroll.rules';
 import type { CreateContractInput, ListContractsQuery } from './contract.schema';
@@ -11,27 +12,68 @@ const contractInclude = {
   document: { select: { id: true, originalName: true } },
 } satisfies Prisma.ContractInclude;
 
+type ContractRow = Prisma.ContractGetPayload<{ include: typeof contractInclude }>;
+
+async function alertDays() {
+  return Number((await getSettings()).expiryAlertDays) || 30;
+}
+
+function daysUntil(date: Date) {
+  const today = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
+  return Math.round((date.getTime() - today.getTime()) / 86_400_000);
+}
+
+// Statuses from the requirements: Active, Expiring Soon, Expired, Renewed, Terminated
+// "expired" is also shown when an active contract's end date has passed
+function present(c: ContractRow, windowDays: number) {
+  let displayStatus = c.status;
+  let daysLeft: number | null = null;
+  if (c.endDate) daysLeft = daysUntil(c.endDate);
+  if (c.status === 'active' && daysLeft !== null) {
+    if (daysLeft < 0) displayStatus = 'expired';
+    else if (daysLeft <= windowDays) displayStatus = 'expiring_soon';
+  }
+  return { ...c, contractNumber: c.contractNumber ?? `CT-${c.id}`, displayStatus, daysLeft };
+}
+
+async function nextContractNumber(tx: Prisma.TransactionClient) {
+  const year = new Date().getUTCFullYear();
+  const prefix = `CT-${year}-`;
+  const last = await tx.contract.findFirst({ where: { contractNumber: { startsWith: prefix } }, orderBy: { id: 'desc' }, select: { contractNumber: true } });
+  const n = last?.contractNumber ? parseInt(last.contractNumber.slice(prefix.length), 10) || 0 : 0;
+  return `${prefix}${String(n + 1).padStart(4, '0')}`;
+}
+
 export async function list(q: ListContractsQuery) {
+  const window = await alertDays();
   const where: Prisma.ContractWhereInput = {};
   if (q.employeeId) where.employeeId = q.employeeId;
-  if (q.status) where.status = q.status;
-  if (q.expiringWithinDays !== undefined) {
+  if (q.status && q.status !== 'expiring_soon') where.status = q.status;
+  const days = q.status === 'expiring_soon' ? window : q.expiringWithinDays;
+  if (days !== undefined) {
     const until = new Date();
-    until.setUTCDate(until.getUTCDate() + q.expiringWithinDays);
+    until.setUTCDate(until.getUTCDate() + days);
     Object.assign(where, { status: 'active', endDate: { not: null, lte: until } });
   }
-  return prisma.contract.findMany({ where, include: contractInclude, orderBy: [{ employeeId: 'asc' }, { startDate: 'desc' }] });
+  const rows = await prisma.contract.findMany({ where, include: contractInclude, orderBy: [{ employeeId: 'asc' }, { startDate: 'desc' }] });
+  return rows.map((c) => present(c, window));
 }
 
 export async function getById(id: number) {
   const c = await prisma.contract.findUnique({ where: { id }, include: contractInclude });
   if (!c) throw new HttpError(404, 'Contract not found');
-  return c;
+  return present(c, await alertDays());
 }
 
-// BR-4.10: a new contract becomes the single active one; the previous active contract is expired
+// Employee self-service: own current contract + history
+export async function mine(user: AuthUser) {
+  if (!user.employeeId) throw new HttpError(400, 'Your account is not linked to an employee record');
+  return list({ employeeId: user.employeeId });
+}
+
+// BR-4.10: a new contract becomes the single active one; the previous active contract is marked "renewed"
 export async function create(input: CreateContractInput, user: AuthUser, ip: string | null) {
-  const emp = await prisma.employee.findUnique({ where: { id: input.employeeId }, select: { id: true, country: true, status: true } });
+  const emp = await prisma.employee.findUnique({ where: { id: input.employeeId }, select: { id: true, country: true, status: true, jobTitle: true } });
   if (!emp) throw new HttpError(404, 'Employee not found');
   if (emp.status !== 'active') throw new HttpError(400, 'Employee is not active');
   if (input.documentId) {
@@ -41,17 +83,20 @@ export async function create(input: CreateContractInput, user: AuthUser, ip: str
 
   const previous = await prisma.contract.findFirst({ where: { employeeId: emp.id, status: 'active' } });
 
-  return prisma.$transaction(async (tx) => {
-    if (previous) await tx.contract.update({ where: { id: previous.id }, data: { status: 'expired' } });
-    const contract = await tx.contract.create({
+  const contract = await prisma.$transaction(async (tx) => {
+    if (previous) await tx.contract.update({ where: { id: previous.id }, data: { status: 'renewed' } });
+    const c = await tx.contract.create({
       data: {
         employeeId: emp.id,
+        contractNumber: await nextContractNumber(tx),
         contractType: input.contractType,
+        jobTitle: input.jobTitle ?? emp.jobTitle,
         startDate: input.startDate,
         endDate: input.endDate ?? null,
         basicSalary: input.basicSalary,
         housingAllowance: input.housingAllowance,
         transportAllowance: input.transportAllowance,
+        weeklyHours: input.weeklyHours ?? null,
         currency: CURRENCY[emp.country]?.code ?? 'BHD',
         documentId: input.documentId ?? null,
         notes: input.notes,
@@ -61,26 +106,37 @@ export async function create(input: CreateContractInput, user: AuthUser, ip: str
     });
     // salary changes are always audited
     await logAudit({
-      actorUserId: user.id, action: 'contract.create', entity: 'Contract', entityId: contract.id,
+      actorUserId: user.id, action: 'contract.create', entity: 'Contract', entityId: c.id,
       changes: {
         employeeId: emp.id,
+        contractNumber: c.contractNumber,
         replacedContractId: previous?.id ?? null,
-        basicSalary: { from: previous?.basicSalary.toFixed() ?? null, to: contract.basicSalary.toFixed() },
-        housingAllowance: { from: previous?.housingAllowance.toFixed() ?? null, to: contract.housingAllowance.toFixed() },
-        transportAllowance: { from: previous?.transportAllowance.toFixed() ?? null, to: contract.transportAllowance.toFixed() },
+        basicSalary: { from: previous?.basicSalary.toFixed() ?? null, to: c.basicSalary.toFixed() },
+        housingAllowance: { from: previous?.housingAllowance.toFixed() ?? null, to: c.housingAllowance.toFixed() },
+        transportAllowance: { from: previous?.transportAllowance.toFixed() ?? null, to: c.transportAllowance.toFixed() },
       },
       ip,
     }, tx);
-    return contract;
+    return c;
   });
+  return present(contract, await alertDays());
 }
 
-export async function expire(id: number, user: AuthUser, ip: string | null) {
-  const c = await getById(id);
-  if (c.status !== 'active') throw new HttpError(400, 'Contract is already expired');
-  return prisma.$transaction(async (tx) => {
-    const updated = await tx.contract.update({ where: { id }, data: { status: 'expired' }, include: contractInclude });
-    await logAudit({ actorUserId: user.id, action: 'contract.expire', entity: 'Contract', entityId: id, ip }, tx);
-    return updated;
+async function closeContract(id: number, status: 'expired' | 'terminated', reason: string | null, user: AuthUser, ip: string | null) {
+  const c = await prisma.contract.findUnique({ where: { id } });
+  if (!c) throw new HttpError(404, 'Contract not found');
+  if (c.status !== 'active') throw new HttpError(400, `Contract is already ${c.status}`);
+  const updated = await prisma.$transaction(async (tx) => {
+    const u = await tx.contract.update({
+      where: { id },
+      data: { status, notes: reason ? [c.notes, `Terminated: ${reason}`].filter(Boolean).join('\n').slice(0, 500) : c.notes },
+      include: contractInclude,
+    });
+    await logAudit({ actorUserId: user.id, action: `contract.${status === 'expired' ? 'expire' : 'terminate'}`, entity: 'Contract', entityId: id, changes: { reason }, ip }, tx);
+    return u;
   });
+  return present(updated, await alertDays());
 }
+
+export const expire = (id: number, user: AuthUser, ip: string | null) => closeContract(id, 'expired', null, user, ip);
+export const terminate = (id: number, reason: string, user: AuthUser, ip: string | null) => closeContract(id, 'terminated', reason, user, ip);
