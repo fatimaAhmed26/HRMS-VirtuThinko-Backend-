@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { LEAVE_TYPES } from './leave-types';
 import { PAY_ITEM_TYPES } from './pay-item-types';
+import { REQUEST_TYPES } from './request-types';
 
 const prisma = new PrismaClient();
 
@@ -92,7 +93,7 @@ async function main() {
   });
   console.log(`Seeded ${ALL.length} permissions, ${Object.keys(ROLES).length} roles, admin: ${email}`);
 
-  // 4. leave types (existing rows are kept, so HR edits aren't overwritten)
+  // 4. leave types 
   for (const t of LEAVE_TYPES) {
     await prisma.leaveType.upsert({
       where: { country_code: { country: t.country, code: t.code } },
@@ -123,6 +124,16 @@ async function main() {
     await prisma.payItemType.upsert({ where: { code: t.code }, update: {}, create: { ...t } });
   }
   console.log(`Seeded ${PAY_ITEM_TYPES.length} pay item types`);
+
+  // 6. employee request types + letter templates (existing rows kept, so HR edits aren't overwritten)
+  for (const t of REQUEST_TYPES) {
+    await prisma.requestType.upsert({
+      where: { code: t.code },
+      update: {},
+      create: { code: t.code, name: t.name, description: t.description, category: t.category, template: t.template },
+    });
+  }
+  console.log(`Seeded ${REQUEST_TYPES.length} request types`);
 }
 
 main()

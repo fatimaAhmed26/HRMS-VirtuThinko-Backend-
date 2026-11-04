@@ -106,8 +106,9 @@ model Employee {
   probationEnd   DateTime? @map("probation_end") @db.Date
   status         String    @default("active") @db.VarChar(20)
   country        String    @default("BH") @db.VarChar(2)
-  isNational     Boolean   @default(false) @map("is_national")    
-  siNewScheme    Boolean   @default(false) @map("si_new_scheme")  
+  isNational     Boolean   @default(false) @map("is_national")    // Bahraini in BH / Saudi in SA -> pension contributions
+  siNewScheme    Boolean   @default(false) @map("si_new_scheme")  // Saudi: first GOSI registration on/after 3 July 2024
+
   bankName          String? @map("bank_name") @db.VarChar(100)
   bankAccountNumber String? @map("bank_account_number") @db.VarChar(255)
 
@@ -127,6 +128,7 @@ model Employee {
   contracts          Contract[]
   payItems           PayItem[]
   payslips           Payslip[]
+  requests           EmployeeRequest[]
 
   @@map("employees")
 }
@@ -237,13 +239,16 @@ model Document {
   size              Int                                            // bytes
   expiryDate        DateTime? @map("expiry_date") @db.Date         // e.g. passport / CPR copy
   visibleToEmployee Boolean   @default(true) @map("visible_to_employee")
+  notes             String?   @db.VarChar(500)
   uploadedByUserId  Int       @map("uploaded_by_user_id")
   createdAt         DateTime  @default(now()) @map("created_at")
   deletedAt         DateTime? @map("deleted_at")                   // soft delete (file kept for retention)
 
-  employee      Employee       @relation(fields: [employeeId], references: [id])
-  leaveRequests LeaveRequest[]
-  contracts     Contract[]
+  employee           Employee          @relation(fields: [employeeId], references: [id])
+  leaveRequests      LeaveRequest[]
+  contracts          Contract[]
+  requestAttachments EmployeeRequest[] @relation("RequestAttachment")
+  requestResults     EmployeeRequest[] @relation("RequestResult")
 
   @@index([employeeId, category])
   @@index([expiryDate])
@@ -255,14 +260,17 @@ model Document {
 model Contract {
   id                 Int       @id @default(autoincrement()) @map("contract_id")
   employeeId         Int       @map("employee_id")
+  contractNumber     String?   @unique @map("contract_number") @db.VarChar(20) // CT-2026-0001 (null on rows created before this column)
   contractType       String    @map("contract_type") @db.VarChar(20)   // unlimited | limited
+  jobTitle           String?   @map("job_title") @db.VarChar(100)
+  weeklyHours        Int?      @map("weekly_hours")
   startDate          DateTime  @map("start_date") @db.Date
   endDate            DateTime? @map("end_date") @db.Date               // null for unlimited
   basicSalary        Decimal   @map("basic_salary") @db.Decimal(12, 3)
   housingAllowance   Decimal   @default(0) @map("housing_allowance") @db.Decimal(12, 3)
   transportAllowance Decimal   @default(0) @map("transport_allowance") @db.Decimal(12, 3)
   currency           String    @db.VarChar(3)                          // BHD | SAR
-  status             String    @default("active") @db.VarChar(20)      // active | expired
+  status             String    @default("active") @db.VarChar(20)      // active | renewed | expired | terminated
   documentId         Int?      @map("document_id")                     // signed contract PDF
   notes              String?   @db.VarChar(500)
   createdByUserId    Int       @map("created_by_user_id")
@@ -332,6 +340,7 @@ model PayrollRun {
   @@map("payroll_runs")
 }
 
+// One row per employee per run - a snapshot that never changes once processed (BR-4.8)
 model Payslip {
   id                    Int      @id @default(autoincrement()) @map("payslip_id")
   runId                 Int      @map("payroll_run_id")
@@ -358,4 +367,99 @@ model Payslip {
 
   @@unique([runId, employeeId])
   @@map("payslips")
+}
+
+// ─────────── Settings ───────────
+
+model Setting {
+  key       String   @id @db.VarChar(50)
+  value     String   @db.VarChar(1000)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+// ─────────── Notifications ───────────
+
+model Notification {
+  id        Int       @id @default(autoincrement()) @map("notification_id")
+  userId    Int       @map("user_id")
+  type      String    @db.VarChar(40)                     // leave, request, payslip, announcement, expiry
+  title     String    @db.VarChar(150)
+  body      String?   @db.VarChar(500)
+  link      String?   @db.VarChar(255)                    // frontend route, e.g. /leave/requests/12
+  dedupeKey String?   @unique @map("dedupe_key") @db.VarChar(120) // stops the same alert being sent twice
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+// ─────────── Employee requests & letters ───────────
+
+model RequestType {
+  id                 Int     @id @default(autoincrement()) @map("request_type_id")
+  code               String  @unique @db.VarChar(30)     // SALARY_CERT, NOC...
+  name               String  @db.VarChar(100)
+  description        String? @db.VarChar(255)
+  category           String  @db.VarChar(10)             // letter (PDF generated) | general
+  template           String? @db.Text                    // letter body with {{placeholders}}
+  requiresAttachment Boolean @default(false) @map("requires_attachment")
+  active             Boolean @default(true)
+
+  requests EmployeeRequest[]
+
+  @@map("request_types")
+}
+
+model EmployeeRequest {
+  id               Int       @id @default(autoincrement()) @map("request_id")
+  employeeId       Int       @map("employee_id")
+  typeId           Int       @map("type_id")
+  purpose          String    @db.VarChar(255)
+  details          String?   @db.Text
+  addressedTo      String?   @map("addressed_to") @db.VarChar(150)  // e.g. "Ministry of Interior", "BBK"
+  attachmentId     Int?      @map("attachment_id")
+  status           String    @default("pending") @db.VarChar(20)    // pending | in_progress | approved | rejected | completed | cancelled
+  handledByUserId  Int?      @map("handled_by_user_id")
+  decisionComment  String?   @map("decision_comment") @db.VarChar(500)
+  resultDocumentId Int?      @map("result_document_id")             // generated letter
+  completedAt      DateTime? @map("completed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  employee       Employee    @relation(fields: [employeeId], references: [id])
+  type           RequestType @relation(fields: [typeId], references: [id])
+  attachment     Document?   @relation("RequestAttachment", fields: [attachmentId], references: [id])
+  resultDocument Document?   @relation("RequestResult", fields: [resultDocumentId], references: [id])
+
+  @@index([employeeId, status])
+  @@index([status])
+  @@map("employee_requests")
+}
+
+// ─────────── Announcements ───────────
+
+model Announcement {
+  id                   Int       @id @default(autoincrement()) @map("announcement_id")
+  title                String    @db.VarChar(150)
+  body                 String    @db.Text
+  priority             String    @default("normal") @db.VarChar(10) // normal | important | urgent
+  pinned               Boolean   @default(false)
+  audience             String    @default("all") @db.VarChar(15)    // all | departments | employees
+  departmentIds        Json?     @map("department_ids")
+  employeeIds          Json?     @map("employee_ids")
+  publishAt            DateTime  @default(now()) @map("publish_at")
+  expiresAt            DateTime? @map("expires_at")
+  attachmentName       String?   @map("attachment_name") @db.VarChar(255)
+  attachmentStoredName String?   @map("attachment_stored_name") @db.VarChar(100)
+  attachmentMime       String?   @map("attachment_mime") @db.VarChar(50)
+  notified             Boolean   @default(false)                     // notifications sent once published
+  createdByUserId      Int       @map("created_by_user_id")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  @@index([publishAt])
+  @@map("announcements")
 }
