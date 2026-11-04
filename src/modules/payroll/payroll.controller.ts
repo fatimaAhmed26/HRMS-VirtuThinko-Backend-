@@ -8,6 +8,9 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { parse } from '../../utils/validate';
 import { HttpError } from '../../utils/httpError';
 import { logAudit } from '../../utils/audit';
+import { getCompany } from '../../utils/settings';
+import { notifyUsers, userIdsForEmployees } from '../../utils/notify';
+import { periodLabel } from './payroll.rules';
 
 function idParam(req: Request): number {
   const id = Number(req.params.id);
@@ -32,7 +35,15 @@ export const recalculate = asyncHandler(async (req, res) => {
 export const transition = (action: service.RunAction) =>
   asyncHandler(async (req, res) => {
     const { comment } = parse(commentSchema, req.body ?? {});
-    res.json(await service.transition(idParam(req), action, comment, req.user!, ip(req)));
+    const run = await service.transition(idParam(req), action, comment, req.user!, ip(req));
+    if (action === 'process') {
+      // payslips are now visible to employees
+      await notifyUsers(await userIdsForEmployees(run.payslips.map((p) => p.employeeId)), {
+        type: 'payslip', title: `Your payslip for ${periodLabel(run.period)} is ready`,
+        link: '/my/payslips', dedupeKey: `payslip:${run.id}`,
+      });
+    }
+    res.json(run);
   });
 
 export const deleteRun = asyncHandler(async (req, res) => {
@@ -48,7 +59,7 @@ export const bankFile = asyncHandler(async (req, res) => {
   res.send(file.content);
 });
 
-//payslips
+// payslips
 export const myPayslips = asyncHandler(async (req, res) => res.json(await service.myPayslips(req.user!)));
 export const getPayslip = asyncHandler(async (req, res) => res.json(await service.getPayslip(idParam(req), req.user!)));
 
@@ -60,6 +71,7 @@ export const payslipPdf = asyncHandler(async (req, res) => {
   res.attachment(`payslip-${slip.run.period}-${slip.employeeCode}.pdf`);
   writePayslipPdf(
     {
+      company: await getCompany(),
       period: slip.run.period,
       employeeCode: slip.employeeCode,
       employeeName: slip.employeeName,
@@ -77,7 +89,7 @@ export const payslipPdf = asyncHandler(async (req, res) => {
   );
 });
 
-//allowance / deduction categories and entries
+// allowance / deduction categories and entries
 export const listItemTypes = asyncHandler(async (_req, res) => res.json(await service.listItemTypes()));
 export const createItemType = asyncHandler(async (req, res) => {
   res.status(201).json(await service.createItemType(parse(createItemTypeSchema, req.body), req.user!, ip(req)));
