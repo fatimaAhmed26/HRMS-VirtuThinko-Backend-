@@ -1,3 +1,4 @@
+PERIOD=${1:-2026-11}
 API=http://127.0.0.1:5000/api
 ADMIN_EMAIL=admin@virtuthinko.com
 ADMIN_PASSWORD=ChangeMe@2026
