@@ -1,6 +1,7 @@
 import { Request } from 'express';
 import prisma from '../../config/prisma';
 import * as service from './leave.service';
+import { onLeaveDecided, onLeaveRequested } from './leave.notifications';
 import {
   createRequestSchema, decisionSchema, holidaySchema, holidaysQuerySchema, listQuerySchema,
   rejectSchema, typesQuerySchema, updateTypeSchema,
@@ -22,7 +23,7 @@ async function approverName(req: Request) {
   return u?.username ?? `user ${req.user!.id}`;
 }
 
-// ── types & holidays
+// types & holidays
 export const listTypes = asyncHandler(async (req, res) => {
   let { country } = parse(typesQuerySchema, req.query);
   if (!country && req.user!.employeeId) {
@@ -50,7 +51,7 @@ export const deleteHoliday = asyncHandler(async (req, res) => {
   res.status(204).end();
 });
 
-// ── balances
+// balances
 export const myBalances = asyncHandler(async (req, res) => {
   if (!req.user!.employeeId) throw new HttpError(400, 'Your account is not linked to an employee record');
   res.json(await service.balances(req.user!.employeeId));
@@ -67,9 +68,11 @@ export const employeeBalances = asyncHandler(async (req, res) => {
   res.json(await service.balances(employeeId));
 });
 
-// ── requests
+//  requests
 export const create = asyncHandler(async (req, res) => {
-  res.status(201).json(await service.createRequest(parse(createRequestSchema, req.body), req.user!, ip(req)));
+  const r = await service.createRequest(parse(createRequestSchema, req.body), req.user!, ip(req));
+  await onLeaveRequested(r);
+  res.status(201).json(r);
 });
 
 export const mine = asyncHandler(async (req, res) => {
@@ -90,12 +93,16 @@ export const getById = asyncHandler(async (req, res) => {
 
 export const approve = asyncHandler(async (req, res) => {
   const { comment } = parse(decisionSchema, req.body ?? {});
-  res.json(await service.decide(idParam(req), 'approved', comment, req.user!, await approverName(req), ip(req)));
+  const r = await service.decide(idParam(req), 'approved', comment, req.user!, await approverName(req), ip(req));
+  await onLeaveDecided(r);
+  res.json(r);
 });
 
 export const reject = asyncHandler(async (req, res) => {
   const { comment } = parse(rejectSchema, req.body ?? {});
-  res.json(await service.decide(idParam(req), 'rejected', comment, req.user!, await approverName(req), ip(req)));
+  const r = await service.decide(idParam(req), 'rejected', comment, req.user!, await approverName(req), ip(req));
+  await onLeaveDecided(r);
+  res.json(r);
 });
 
 export const cancel = asyncHandler(async (req, res) => {
