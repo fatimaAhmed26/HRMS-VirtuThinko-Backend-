@@ -1,6 +1,6 @@
 import { Request, Router } from 'express';
 import * as service from './contract.service';
-import { createContractSchema, listQuerySchema } from './contract.schema';
+import { createContractSchema, listQuerySchema, terminateSchema } from './contract.schema';
 import { authenticate, requirePermission } from '../../middleware/auth';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { parse } from '../../utils/validate';
@@ -14,6 +14,10 @@ function idParam(req: Request): number {
 
 const router = Router();
 router.use(authenticate);
+
+router.get('/me', asyncHandler(async (req, res) => {
+  res.json(await service.mine(req.user!));
+}));
 
 router.get('/', requirePermission('contract:view'), asyncHandler(async (req, res) => {
   res.json(await service.list(parse(listQuerySchema, req.query)));
@@ -29,6 +33,11 @@ router.post('/', requirePermission('contract:manage'), asyncHandler(async (req, 
 
 router.post('/:id/expire', requirePermission('contract:manage'), asyncHandler(async (req, res) => {
   res.json(await service.expire(idParam(req), req.user!, req.ip ?? null));
+}));
+
+router.post('/:id/terminate', requirePermission('contract:manage'), asyncHandler(async (req, res) => {
+  const { reason } = parse(terminateSchema, req.body);
+  res.json(await service.terminate(idParam(req), reason, req.user!, req.ip ?? null));
 }));
 
 export default router;
