@@ -5,11 +5,9 @@ import { authenticate, requirePermission } from '../../middleware/auth';
 const router = Router();
 router.use(authenticate);
 
-// payslips (employees see their own; access checked in the service)
-router.get('/payslips/me', c.myPayslips);
-router.get('/payslips/:id', c.getPayslip);
-router.get('/payslips/:id/pdf', c.payslipPdf);
-
+// payslips - HR and payroll only (employees do not see payroll in this system)
+router.get('/payslips/:id', requirePermission('payroll:view'), c.getPayslip);
+router.get('/payslips/:id/pdf', requirePermission('payroll:view'), c.payslipPdf);
 // payroll runs
 router.get('/runs', requirePermission('payroll:view'), c.listRuns);
 router.post('/runs', requirePermission('payroll:create'), c.createRun);

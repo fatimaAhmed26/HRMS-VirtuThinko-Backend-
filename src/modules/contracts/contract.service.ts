@@ -65,10 +65,11 @@ export async function getById(id: number) {
   return present(c, await alertDays());
 }
 
-// Employee self-service: own current contract + history
+// Employee self-service: own current contract + history, without salary figures (payroll is HR-only)
 export async function mine(user: AuthUser) {
   if (!user.employeeId) throw new HttpError(400, 'Your account is not linked to an employee record');
-  return list({ employeeId: user.employeeId });
+  const rows = await list({ employeeId: user.employeeId });
+  return rows.map(({ basicSalary: _b, housingAllowance: _h, transportAllowance: _t, currency: _c, ...rest }) => rest);
 }
 
 // BR-4.10: a new contract becomes the single active one; the previous active contract is marked "renewed"

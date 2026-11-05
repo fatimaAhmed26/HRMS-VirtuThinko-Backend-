@@ -9,8 +9,6 @@ import { parse } from '../../utils/validate';
 import { HttpError } from '../../utils/httpError';
 import { logAudit } from '../../utils/audit';
 import { getCompany } from '../../utils/settings';
-import { notifyUsers, userIdsForEmployees } from '../../utils/notify';
-import { periodLabel } from './payroll.rules';
 
 function idParam(req: Request): number {
   const id = Number(req.params.id);
@@ -35,15 +33,7 @@ export const recalculate = asyncHandler(async (req, res) => {
 export const transition = (action: service.RunAction) =>
   asyncHandler(async (req, res) => {
     const { comment } = parse(commentSchema, req.body ?? {});
-    const run = await service.transition(idParam(req), action, comment, req.user!, ip(req));
-    if (action === 'process') {
-      // payslips are now visible to employees
-      await notifyUsers(await userIdsForEmployees(run.payslips.map((p) => p.employeeId)), {
-        type: 'payslip', title: `Your payslip for ${periodLabel(run.period)} is ready`,
-        link: '/my/payslips', dedupeKey: `payslip:${run.id}`,
-      });
-    }
-    res.json(run);
+    res.json(await service.transition(idParam(req), action, comment, req.user!, ip(req)));
   });
 
 export const deleteRun = asyncHandler(async (req, res) => {
@@ -59,12 +49,11 @@ export const bankFile = asyncHandler(async (req, res) => {
   res.send(file.content);
 });
 
-// payslips
-export const myPayslips = asyncHandler(async (req, res) => res.json(await service.myPayslips(req.user!)));
-export const getPayslip = asyncHandler(async (req, res) => res.json(await service.getPayslip(idParam(req), req.user!)));
+// payslips (HR and payroll only - the routes require payroll:view)
+export const getPayslip = asyncHandler(async (req, res) => res.json(await service.getPayslip(idParam(req))));
 
 export const payslipPdf = asyncHandler(async (req, res) => {
-  const slip = await service.getPayslip(idParam(req), req.user!);
+  const slip = await service.getPayslip(idParam(req));
   await logAudit({ actorUserId: req.user!.id, action: 'payslip.download', entity: 'Payslip', entityId: slip.id, ip: ip(req) });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Cache-Control', 'private, no-store');

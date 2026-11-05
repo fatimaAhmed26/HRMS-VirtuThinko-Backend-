@@ -9,7 +9,6 @@ import { periodRange } from './payroll.rules';
 import type { CreateItemInput, CreateItemTypeInput, ListItemsQuery } from './payroll.schema';
 
 type Ip = string | null;
-const RELEASED = ['processed', 'paid']; // payslips visible to employees
 
 // ───────────── payroll runs ─────────────
 
@@ -179,20 +178,10 @@ export async function bankFile(id: number, user: AuthUser, ip: Ip) {
 
 // ───────────── payslips ─────────────
 
-export async function myPayslips(user: AuthUser) {
-  if (!user.employeeId) throw new HttpError(400, 'Your account is not linked to an employee record');
-  return prisma.payslip.findMany({
-    where: { employeeId: user.employeeId, run: { status: { in: RELEASED } } },
-    select: { id: true, currency: true, grossSalary: true, totalDeductions: true, netSalary: true, run: { select: { period: true, status: true } } },
-    orderBy: { run: { period: 'desc' } },
-  });
-}
-
-export async function getPayslip(id: number, user: AuthUser) {
+// HR and payroll only - the route requires payroll:view
+export async function getPayslip(id: number) {
   const slip = await prisma.payslip.findUnique({ where: { id }, include: { run: { select: { period: true, status: true } } } });
   if (!slip) throw new HttpError(404, 'Payslip not found');
-  const isOwner = slip.employeeId === user.employeeId && RELEASED.includes(slip.run.status);
-  if (!isOwner && !user.permissions.includes('payroll:view')) throw new HttpError(403, 'You do not have access to this payslip');
   return slip;
 }
 
