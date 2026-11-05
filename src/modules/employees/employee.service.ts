@@ -149,8 +149,7 @@ export async function update(id: number, input: UpdateEmployeeInput, actor: Acto
   await checkReferences(input, id);
   // interns have no portal login
   if (input.employmentType === 'Intern' && before.user) {
-    throw new HttpError(400, 'This person has a portal account - deactivate or unlink it before making them an intern');
-  }
+    throw new HttpError(400, 'This person has a portal account - deactivate or unlink it before making them an intern');  }
   const type = input.employmentType !== undefined ? input.employmentType : before.employmentType;
   const client = input.clientCompanyId !== undefined ? input.clientCompanyId : before.clientCompanyId;
   if (type === 'Outsourced' && !client) throw new HttpError(400, 'Outsourced staff need a client company');
