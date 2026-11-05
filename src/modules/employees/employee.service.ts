@@ -22,12 +22,15 @@ const listSelect = {
   status: true,
   hireDate: true,
   photoUrl: true,
+    employmentType: true,
   department: { select: { id: true, name: true } },
+  clientCompany: { select: { id: true, name: true } },
   manager: { select: { id: true, firstName: true, lastName: true } },
 } satisfies Prisma.EmployeeSelect;
 
 const detailInclude = {
   department: { select: { id: true, name: true } },
+  clientCompany: { select: { id: true, name: true, annualLeaveDays: true } },
   manager: { select: { id: true, employeeCode: true, firstName: true, lastName: true } },
   user: { select: { id: true, username: true, status: true } },
 } satisfies Prisma.EmployeeInclude;
@@ -53,11 +56,14 @@ async function nextEmployeeCode(tx: Prisma.TransactionClient) {
   return `VT-${String(lastNumber + 1).padStart(4, '0')}`;
 }
 
-// Make sure the department / manager exist before saving
-async function checkReferences(data: { departmentId?: number | null; managerId?: number | null }, selfId?: number) {
-  if (data.departmentId) {
-    const dept = await prisma.department.findUnique({ where: { id: data.departmentId } });
-    if (!dept) throw new HttpError(400, 'Department not found');
+// Make sure the department / manager / client company exist before saving
+  async function checkReferences(
+    data: { departmentId?: number | null; managerId?: number | null; clientCompanyId?: number | null },
+   selfId?: number
+    ) {
+    if (data.clientCompanyId) {
+    const client = await prisma.clientCompany.findUnique({ where: { id: data.clientCompanyId } });
+    if (!client || !client.active) throw new HttpError(400, 'Client company not found or inactive');
   }
   if (data.managerId) {
     if (data.managerId === selfId) throw new HttpError(400, 'An employee cannot be their own manager');
@@ -71,6 +77,8 @@ export async function list(q: ListEmployeesQuery) {
   if (q.status) where.status = q.status;
   if (q.departmentId) where.departmentId = q.departmentId;
   if (q.jobTitle) where.jobTitle = { contains: q.jobTitle };
+  if (q.employmentType) where.employmentType = q.employmentType;
+  if (q.clientCompanyId) where.clientCompanyId = q.clientCompanyId;
   if (q.search) {
     where.OR = [
       { firstName: { contains: q.search } },
@@ -103,6 +111,9 @@ export async function getById(id: number, canSeeBank: boolean) {
 }
 
 export async function create(input: CreateEmployeeInput, actor: Actor) {
+  if (input.employmentType === 'Outsourced' && !input.clientCompanyId) {
+    throw new HttpError(400, 'Outsourced staff need a client company');
+  }
   await checkReferences(input);
 
   const created = await prisma.$transaction(async (tx) => {
@@ -133,10 +144,16 @@ export async function create(input: CreateEmployeeInput, actor: Actor) {
 }
 
 export async function update(id: number, input: UpdateEmployeeInput, actor: Actor) {
-  const before = await prisma.employee.findUnique({ where: { id } });
+  const before = await prisma.employee.findUnique({ where: { id }, include: { user: { select: { id: true } } } });
   if (!before) throw new HttpError(404, 'Employee not found');
   await checkReferences(input, id);
-
+  // interns have no portal login
+  if (input.employmentType === 'Intern' && before.user) {
+    throw new HttpError(400, 'This person has a portal account - deactivate or unlink it before making them an intern');
+  }
+  const type = input.employmentType !== undefined ? input.employmentType : before.employmentType;
+  const client = input.clientCompanyId !== undefined ? input.clientCompanyId : before.clientCompanyId;
+  if (type === 'Outsourced' && !client) throw new HttpError(400, 'Outsourced staff need a client company');
   // compare against the decrypted bank number so re-saving the same value isn't a "change"
   const beforePlain = {
     ...before,
