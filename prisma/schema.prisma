@@ -70,6 +70,19 @@ model RolePermission {
 }
 
 // ─────────── Organization ───────────
+// Client companies that outsourced staff are deployed to (BBK, BNP Paribas, Ithmaar...)
+model ClientCompany {
+  id              Int      @id @default(autoincrement()) @map("client_company_id")
+  name            String   @unique @db.VarChar(150)
+  nameAr          String?  @map("name_ar") @db.VarChar(150)
+  annualLeaveDays Int      @map("annual_leave_days")   // replaces the company's annual leave for staff deployed here
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  employees Employee[]
+
+  @@map("client_companies")
+}
 
 model Department {
   id        Int      @id @default(autoincrement()) @map("department_id")
@@ -98,6 +111,7 @@ model Employee {
   photoUrl       String?   @map("photo_url") @db.VarChar(255)
 
   departmentId   Int?      @map("department_id")
+  clientCompany      ClientCompany? @relation(fields: [clientCompanyId], references: [id])
   jobTitle       String?   @map("job_title") @db.VarChar(100)
   managerId      Int?      @map("manager_id")
   employmentType String?   @map("employment_type") @db.VarChar(30)
@@ -109,6 +123,12 @@ model Employee {
   isNational     Boolean   @default(false) @map("is_national")    // Bahraini in BH / Saudi in SA -> pension contributions
   siNewScheme    Boolean   @default(false) @map("si_new_scheme")  // Saudi: first GOSI registration on/after 3 July 2024
 
+  // outsourced staff 
+  clientCompanyId  Int?      @map("client_company_id")
+  clientSupervisor String?   @map("client_supervisor") @db.VarChar(150)
+  poNumber         String?   @map("po_number") @db.VarChar(50)
+  deploymentStart  DateTime? @map("deployment_start") @db.Date
+  deploymentEnd    DateTime? @map("deployment_end") @db.Date
   bankName          String? @map("bank_name") @db.VarChar(100)
   bankAccountNumber String? @map("bank_account_number") @db.VarChar(255)
 
@@ -169,6 +189,8 @@ model LeaveType {
   oncePerEmployment  Boolean @default(false) @map("once_per_employment")
   requiresAttachment Boolean @default(false) @map("requires_attachment")
   countWorkingDays   Boolean @default(false) @map("count_working_days") // skip Fri/Sat + public holidays
+    noticeFreeDays     Int     @default(0) @map("notice_free_days")  // requests up to this many days need no notice
+  noticeDays         Int?    @map("notice_days")                  // longer requests need this many days' notice
   active             Boolean @default(true)
 
   requests LeaveRequest[]
