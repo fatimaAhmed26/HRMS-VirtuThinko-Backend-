@@ -20,6 +20,7 @@ import reportRoutes from './modules/reports/report.routes';
 import auditRoutes from './modules/audit/audit.routes';
 import settingsRoutes from './modules/settings/settings.routes';
 import { HttpError } from './utils/httpError';
+  import clientRoutes from './modules/clients/client.routes';
 
 const app = express();
 
@@ -48,6 +49,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/clients', clientRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {
