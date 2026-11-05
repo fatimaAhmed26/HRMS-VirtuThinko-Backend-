@@ -96,8 +96,8 @@ async function main() {
   // 4. leave types 
   for (const t of LEAVE_TYPES) {
     await prisma.leaveType.upsert({
-      where: { country_code: { country: t.country, code: t.code } },
-      update: {},
+            where: { country_code: { country: t.country, code: t.code } },
+      update: { noticeFreeDays: t.noticeFreeDays ?? 0, noticeDays: t.noticeDays ?? null },
       create: {
         country: t.country,
         code: t.code,
@@ -114,6 +114,8 @@ async function main() {
         oncePerEmployment: t.oncePerEmployment ?? false,
         requiresAttachment: t.requiresAttachment ?? false,
         countWorkingDays: t.countWorkingDays ?? false,
+        noticeFreeDays: t.noticeFreeDays ?? 0,
+        noticeDays: t.noticeDays ?? null,
       },
     });
   }
