@@ -48,9 +48,10 @@ async function checkRoles(roleIds: number[]) {
 async function checkEmployee(employeeId: number, exceptUserId?: number) {
   const emp = await prisma.employee.findUnique({
     where: { id: employeeId },
-    select: { id: true, email: true, status: true, user: { select: { id: true } } },
+    select: { id: true, email: true, status: true, employmentType: true, user: { select: { id: true } } },
   });
   if (!emp) throw new HttpError(400, 'Employee not found');
+  if (emp.employmentType === 'Intern') throw new HttpError(400, 'Interns do not get a portal account');
   if (emp.status !== 'active') throw new HttpError(400, 'Cannot link an account to an inactive employee');
   if (emp.user && emp.user.id !== exceptUserId) throw new HttpError(409, 'This employee already has a user account');
   return emp;
