@@ -47,6 +47,8 @@ export const updateTypeSchema = z.object({
   minServiceMonths: z.number().int().min(0).optional(),
   requiresAttachment: z.boolean().optional(),
   countWorkingDays: z.boolean().optional(),
+  noticeFreeDays: z.number().int().min(0).max(365).optional(),
+  noticeDays: z.number().int().min(1).max(365).nullable().optional(),
   active: z.boolean().optional(),
 });
 
