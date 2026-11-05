@@ -22,6 +22,7 @@ const requestInclude = {
 
 const reference = (id: number) => `REQ-${String(id).padStart(5, '0')}`;
 const canProcess = (u: AuthUser) => u.permissions.includes('request:process');
+const label = (name: string) => (/request$/i.test(name) ? name.toLowerCase() : `${name.toLowerCase()} request`);
 
 // types 
 
