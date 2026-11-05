@@ -18,12 +18,14 @@ export interface LeaveTypeSeed {
   oncePerEmployment?: boolean;
   requiresAttachment?: boolean;
   countWorkingDays?: boolean;
+  noticeFreeDays?: number; 
+  noticeDays?: number;    
 }
 
 export const LEAVE_TYPES: LeaveTypeSeed[] = [
   // ───── Bahrain ─────
-  { country: 'BH', code: 'ANNUAL', name: 'Annual Leave', allowance: 'yearly', days: 30, accrueFirstYear: true,
-    description: '30 days per year; accrues 2.5 days per month during the first year' },
+  { country: 'BH', code: 'ANNUAL', name: 'Annual Leave', allowance: 'yearly', days: 30, accrueFirstYear: true, noticeFreeDays: 4, noticeDays: 14,
+    description: '30 days per year; accrues 2.5 days per month during the first year. Over 4 days needs 14 days notice' },
   { country: 'BH', code: 'SICK', name: 'Sick Leave', allowance: 'yearly', days: 55, minServiceMonths: 3, requiresAttachment: true,
     payTiers: [{ days: 15, payPercent: 100 }, { days: 20, payPercent: 50 }, { days: 20, payPercent: 0 }],
     description: '15 days full pay, 20 days half pay, 20 days unpaid; medical certificate required' },
@@ -45,8 +47,8 @@ export const LEAVE_TYPES: LeaveTypeSeed[] = [
     payTiers: [{ days: 30, payPercent: 0 }], description: 'By agreement with the employer' },
 
   // ───── Saudi Arabia ─────
-  { country: 'SA', code: 'ANNUAL', name: 'Annual Leave', allowance: 'yearly', days: 21, daysAfterYears: 5, daysAfter: 30, countWorkingDays: true,
-    description: '21 days per year; 30 days after 5 years of service' },
+  { country: 'SA', code: 'ANNUAL', name: 'Annual Leave', allowance: 'yearly', days: 21, daysAfterYears: 5, daysAfter: 30, countWorkingDays: true, noticeFreeDays: 4, noticeDays: 14,
+    description: '21 days per year; 30 days after 5 years of service. Over 4 days needs 14 days notice' },
   { country: 'SA', code: 'SICK', name: 'Sick Leave', allowance: 'yearly', days: 120, requiresAttachment: true,
     payTiers: [{ days: 30, payPercent: 100 }, { days: 60, payPercent: 75 }, { days: 30, payPercent: 0 }],
     description: '30 days full pay, 60 days at 75%, 30 days unpaid; medical certificate required' },
