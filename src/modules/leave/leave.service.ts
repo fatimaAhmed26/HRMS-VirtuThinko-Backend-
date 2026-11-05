@@ -3,11 +3,12 @@ import prisma from '../../config/prisma';
 import { HttpError } from '../../utils/httpError';
 import { logAudit } from '../../utils/audit';
 import type { AuthUser } from '../../types/express';
-import { countDays, monthsOfService, payBreakdown, tiersOf, toDateKey, yearlyEntitlement } from './leave.rules';
+import { countDays, monthsOfService, payBreakdown, tiersOf, toDateKey, yearlyEntitlement, type LeaveRules } from './leave.rules';
 import type { CreateRequestInput, ListRequestsQuery, UpdateTypeInput } from './leave.schema';
 
 const ACTIVE_STATUSES = ['pending_manager', 'pending_hr', 'approved'];
 const PENDING_STATUSES = ['pending_manager', 'pending_hr'];
+
 const requestInclude = {
   employee: {
     select: { id: true, employeeCode: true, firstName: true, lastName: true, managerId: true, country: true,
@@ -17,6 +18,7 @@ const requestInclude = {
   attachment: { select: { id: true, originalName: true, mimeType: true, size: true } },
   approvals: { orderBy: { createdAt: 'asc' } },
 } satisfies Prisma.LeaveRequestInclude;
+
 const canManage = (u: AuthUser) => u.permissions.includes('leave:manage');
 
 function requireEmployee(user: AuthUser) {
@@ -44,6 +46,14 @@ async function usedDays(employeeId: number, leaveTypeId: number, year: number) {
   const pending = rows.filter((r) => r.status !== 'approved').reduce((s, r) => s + (r._sum.days ?? 0), 0);
   return { approved, pending };
 }
+
+// Outsourced staff get their client company's annual leave days instead of the company's
+function rulesFor<T extends LeaveRules & { code: string }>(type: T, client: { annualLeaveDays: number } | null): T {
+  if (type.code !== 'ANNUAL' || !client) return type;
+  return { ...type, days: client.annualLeaveDays, daysAfterYears: null, daysAfter: null };
+}
+
+const todayUtc = () => new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
 
 // ───────────── Leave types & holidays ─────────────
 
@@ -89,7 +99,8 @@ export async function deleteHoliday(id: number) {
 export async function balances(employeeId: number, year = new Date().getUTCFullYear()) {
   const emp = await prisma.employee.findUnique({
     where: { id: employeeId },
-    select: { id: true, firstName: true, lastName: true, country: true, gender: true, hireDate: true },
+    select: { id: true, firstName: true, lastName: true, country: true, gender: true, hireDate: true,
+      clientCompany: { select: { name: true, annualLeaveDays: true } } },
   });
   if (!emp) throw new HttpError(404, 'Employee not found');
 
@@ -97,7 +108,8 @@ export async function balances(employeeId: number, year = new Date().getUTCFullY
   const asOf = new Date();
   const result = [];
 
-  for (const t of types) {
+  for (const raw of types) {
+    const t = rulesFor(raw, emp.clientCompany);
     if (t.gender && emp.gender && t.gender !== emp.gender) continue; // hide e.g. maternity for men
     if (t.allowance === 'yearly') {
       const entitlement = yearlyEntitlement(t, emp.hireDate, asOf);
@@ -122,12 +134,14 @@ export async function createRequest(input: CreateRequestInput, user: AuthUser, i
   const emp = await prisma.employee.findUnique({
     where: { id: employeeId },
     select: { id: true, status: true, country: true, gender: true, hireDate: true, managerId: true,
+      clientCompany: { select: { annualLeaveDays: true } },
       manager: { select: { status: true, user: { select: { status: true } } } } },
   });
   if (!emp || emp.status !== 'active') throw new HttpError(400, 'Employee record is not active');
 
-  const type = await prisma.leaveType.findUnique({ where: { id: input.leaveTypeId } });
-  if (!type || !type.active) throw new HttpError(400, 'Leave type not found');
+  const found = await prisma.leaveType.findUnique({ where: { id: input.leaveTypeId } });
+  if (!found || !found.active) throw new HttpError(400, 'Leave type not found');
+  const type = rulesFor(found, emp.clientCompany);
   if (type.country !== emp.country) throw new HttpError(400, `This leave type does not apply to ${emp.country} employees`);
 
   // eligibility
@@ -152,16 +166,24 @@ export async function createRequest(input: CreateRequestInput, user: AuthUser, i
     if (before > 0) throw new HttpError(400, `${type.name} can only be taken once during employment`);
   }
 
+  // day count
+  const holidays = type.countWorkingDays ? await holidaySet(emp.country, input.startDate, input.endDate) : new Set<string>();
+  const days = countDays(input.startDate, input.endDate, type.countWorkingDays, holidays);
+  if (days === 0) throw new HttpError(400, 'The selected dates contain no working days');
+
+  // notice rule, e.g. annual leave over 4 days needs 14 days' notice
+  if (type.noticeDays && days > type.noticeFreeDays) {
+    const noticeGiven = Math.round((input.startDate.getTime() - todayUtc().getTime()) / 86_400_000);
+    if (noticeGiven < type.noticeDays) {
+      throw new HttpError(400, `${type.name} longer than ${type.noticeFreeDays} days needs ${type.noticeDays} days' notice (this starts in ${Math.max(noticeGiven, 0)} days)`);
+    }
+  }
+
   // no overlapping requests
   const overlap = await prisma.leaveRequest.findFirst({
     where: { employeeId, status: { in: ACTIVE_STATUSES }, startDate: { lte: input.endDate }, endDate: { gte: input.startDate } },
   });
   if (overlap) throw new HttpError(409, `Overlaps with another leave request (#${overlap.id})`);
-
-  // day count
-  const holidays = type.countWorkingDays ? await holidaySet(emp.country, input.startDate, input.endDate) : new Set<string>();
-  const days = countDays(input.startDate, input.endDate, type.countWorkingDays, holidays);
-  if (days === 0) throw new HttpError(400, 'The selected dates contain no working days');
 
   // balance / limit
   let alreadyUsed = 0;
