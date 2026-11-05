@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+// Interns have no portal login; Outsourced staff work at a client company
+export const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Fixed-term', 'Contractor', 'Intern', 'Outsourced', 'Other'] as const;
+
 const text = (max: number) => z.string().trim().max(max).optional().nullable();
 const date = z.coerce.date().optional().nullable(); // accepts "2026-01-15"
 const id = z.number().int().positive().optional().nullable();
@@ -23,17 +26,24 @@ export const createEmployeeSchema = z.object({
   departmentId: id,
   jobTitle: text(100),
   managerId: id,
-  employmentType: z.enum(['Full-time', 'Part-time', 'Contract', 'Intern']).optional().nullable(),
+  employmentType: z.enum(EMPLOYMENT_TYPES).optional().nullable(),
   workLocation: text(100),
-  country: z.enum(['BH', 'SA']).optional(),
-  isNational: z.boolean().optional(),
-  siNewScheme: z.boolean().optional(),
+  country: z.enum(['BH', 'SA']).optional(), // which labour law applies (default BH)
+  isNational: z.boolean().optional(),       // Bahraini (BH) / Saudi (SA) -> pension contributions
+  siNewScheme: z.boolean().optional(),      // Saudi: first GOSI registration on/after 3 July 2024
   hireDate: date,
   probationEnd: date,
 
   // bank (encrypted before saving)
   bankName: text(100),
   bankAccountNumber: z.string().trim().max(34).optional().nullable(), // IBAN max 34
+
+  // outsourced staff
+  clientCompanyId: id,
+  clientSupervisor: text(150),
+  poNumber: text(50),
+  deploymentStart: date,
+  deploymentEnd: date,
 
   // emergency contact
   emergencyName: text(100),
@@ -52,11 +62,14 @@ export const listQuerySchema = z.object({
   search: z.string().trim().optional(),          // name, code, email, job title, department
   departmentId: z.coerce.number().int().positive().optional(),
   jobTitle: z.string().trim().optional(),
+  employmentType: z.enum(EMPLOYMENT_TYPES).optional(), // e.g. ?employmentType=Intern for the Interns page
+  clientCompanyId: z.coerce.number().int().positive().optional(),
   status: z.enum(['active', 'inactive']).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+// Fields an employee may change on their own profile (everything else is HR-only)
 export const updateMeSchema = z.object({
   phone: text(20),
   address: text(255),
