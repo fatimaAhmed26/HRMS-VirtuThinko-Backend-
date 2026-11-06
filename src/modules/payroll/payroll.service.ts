@@ -6,16 +6,17 @@ import { decrypt } from '../../utils/crypto';
 import type { AuthUser } from '../../types/express';
 import { calculatePayslip } from './payroll.calc';
 import { periodRange } from './payroll.rules';
-import type { CreateItemInput, CreateItemTypeInput, ListItemsQuery } from './payroll.schema';
+import type { CreateItemInput, CreateItemTypeInput, ListItemsQuery, ListRunsQuery } from './payroll.schema';
 
 type Ip = string | null;
 
 // ───────────── payroll runs ─────────────
 
-async function computeLines(period: string) {
+// Only employees of this entity (BH or SA) are included
+async function computeLines(period: string, entity: string) {
   const { end } = periodRange(period);
   const employees = await prisma.employee.findMany({
-    where: { status: 'active', OR: [{ hireDate: null }, { hireDate: { lte: end } }] },
+    where: { status: 'active', country: entity, OR: [{ hireDate: null }, { hireDate: { lte: end } }] },
     select: { id: true, employeeCode: true, firstName: true, lastName: true },
     orderBy: { id: 'asc' },
   });
@@ -35,17 +36,19 @@ async function computeLines(period: string) {
   return { payslips, warnings };
 }
 
-export async function createRun(period: string, user: AuthUser, ip: Ip) {
-  if (await prisma.payrollRun.findUnique({ where: { period } })) throw new HttpError(409, `A payroll run for ${period} already exists`);
-  const { payslips, warnings } = await computeLines(period);
+export async function createRun(period: string, entity: string, user: AuthUser, ip: Ip) {
+  if (await prisma.payrollRun.findUnique({ where: { period_entity: { period, entity } } })) {
+    throw new HttpError(409, `A ${entity} payroll run for ${period} already exists`);
+  }
+  const { payslips, warnings } = await computeLines(period, entity);
 
   const run = await prisma.$transaction(async (tx) => {
     const r = await tx.payrollRun.create({
-      data: { period, createdByUserId: user.id, warnings: warnings as unknown as Prisma.InputJsonValue },
+      data: { period, entity, createdByUserId: user.id, warnings: warnings as unknown as Prisma.InputJsonValue },
     });
     await tx.payslip.createMany({ data: payslips.map((p) => ({ ...p, runId: r.id })) });
     await logAudit({ actorUserId: user.id, action: 'payroll.create', entity: 'PayrollRun', entityId: r.id,
-      changes: { period, employees: payslips.length, warnings: warnings.length }, ip }, tx);
+      changes: { period, entity, employees: payslips.length, warnings: warnings.length }, ip }, tx);
     return r;
   });
   return getRun(run.id);
@@ -55,7 +58,7 @@ export async function createRun(period: string, user: AuthUser, ip: Ip) {
 export async function recalculate(id: number, user: AuthUser, ip: Ip) {
   const run = await findRun(id);
   if (run.status !== 'draft') throw new HttpError(400, 'Only draft payroll can be recalculated - return it to draft first');
-  const { payslips, warnings } = await computeLines(run.period);
+  const { payslips, warnings } = await computeLines(run.period, run.entity);
 
   await prisma.$transaction(async (tx) => {
     await tx.payslip.deleteMany({ where: { runId: id } });
@@ -86,8 +89,11 @@ async function totalsFor(runIds: number[]) {
   }));
 }
 
-export async function listRuns() {
-  const runs = await prisma.payrollRun.findMany({ orderBy: { period: 'desc' } });
+export async function listRuns(q: ListRunsQuery = {}) {
+  const runs = await prisma.payrollRun.findMany({
+    where: { entity: q.entity, period: q.period },
+    orderBy: [{ period: 'desc' }, { entity: 'asc' }],
+  });
   const totals = await totalsFor(runs.map((r) => r.id));
   return runs.map((r) => ({ ...r, totals: totals.filter((t) => t.runId === r.id).map(({ runId: _, ...t }) => t) }));
 }
@@ -149,7 +155,7 @@ export async function deleteRun(id: number, user: AuthUser, ip: Ip) {
   if (run.status !== 'draft') throw new HttpError(400, 'Only draft payroll can be deleted');
   await prisma.$transaction(async (tx) => {
     await tx.payrollRun.delete({ where: { id } });
-    await logAudit({ actorUserId: user.id, action: 'payroll.delete', entity: 'PayrollRun', entityId: id, changes: { period: run.period }, ip }, tx);
+    await logAudit({ actorUserId: user.id, action: 'payroll.delete', entity: 'PayrollRun', entityId: id, changes: { period: run.period, entity: run.entity }, ip }, tx);
   });
 }
 
@@ -173,12 +179,12 @@ export async function bankFile(id: number, user: AuthUser, ip: Ip) {
   }
   await logAudit({ actorUserId: user.id, action: 'payroll.bank_export', entity: 'PayrollRun', entityId: id,
     changes: { employees: slips.length, missingBankDetails: missing }, ip });
-  return { filename: `payroll-${run.period}-bank.csv`, content: lines.join('\r\n') + '\r\n', missing };
+  return { filename: `payroll-${run.entity}-${run.period}-bank.csv`, content: lines.join('\r\n') + '\r\n', missing };
 }
 
 // ───────────── payslips ─────────────
 
-// HR and payroll only - the route requires payroll:view
+// HR and payroll only  the route requires payroll:view
 export async function getPayslip(id: number) {
   const slip = await prisma.payslip.findUnique({ where: { id }, include: { run: { select: { period: true, status: true } } } });
   if (!slip) throw new HttpError(404, 'Payslip not found');
