@@ -40,7 +40,7 @@ const range = (q: ReportQuery) => {
 interface ReportDef {
   title: string;
   description: string;
-  permissions: string[]; 
+  permissions: string[];
   build: (q: ReportQuery) => Promise<ReportResult>;
 }
 
@@ -202,13 +202,14 @@ export const REPORTS: Record<string, ReportDef> = {
 
   payroll: {
     title: 'Payroll summary',
-    description: 'Gross, deductions and net per employee for a month (filter: period, required)',
+    description: 'Gross, deductions and net per employee for a month (filters: period required, country = BH or SA)',
     permissions: ['report:view', 'payroll:view'],
     async build(q) {
       if (!q.period) throw new HttpError(400, 'period is required, e.g. ?period=2026-11');
-      const run = await prisma.payrollRun.findUnique({ where: { period: q.period } });
-      if (!run) throw new HttpError(404, `No payroll run for ${q.period}`);
-      const slips = await prisma.payslip.findMany({ where: { runId: run.id }, orderBy: [{ currency: 'asc' }, { employeeCode: 'asc' }] });
+      // one run per entity: both by default, or one with ?country=BH|SA
+      const runs = await prisma.payrollRun.findMany({ where: { period: q.period, entity: q.country }, orderBy: { entity: 'asc' } });
+      if (runs.length === 0) throw new HttpError(404, `No payroll run for ${q.period}`);
+      const slips = await prisma.payslip.findMany({ where: { runId: { in: runs.map((r) => r.id) } }, orderBy: [{ currency: 'asc' }, { employeeCode: 'asc' }] });
       const rows: Record<string, Cell>[] = slips.map((s) => ({
         code: s.employeeCode, name: s.employeeName, department: s.department, currency: s.currency,
         gross: n(s.grossSalary), deductions: n(s.totalDeductions), net: n(s.netSalary),
@@ -219,7 +220,7 @@ export const REPORTS: Record<string, ReportDef> = {
         rows.push({ code: 'TOTAL', name: `${mine.length} employee(s)`, department: null, currency: cur, gross: sum('grossSalary'), deductions: sum('totalDeductions'), net: sum('netSalary') });
       }
       return {
-        title: 'Payroll summary', subtitle: `${q.period} (${run.status})`,
+        title: 'Payroll summary', subtitle: `${q.period} (${runs.map((r) => `${r.entity} ${r.status}`).join(', ')})`,
         columns: [
           { key: 'code', label: 'ID', width: 10 }, { key: 'name', label: 'Employee', width: 22 }, { key: 'department', label: 'Department', width: 18 },
           { key: 'currency', label: 'Cur.', width: 6 }, { key: 'gross', label: 'Gross', numeric: true, width: 13 },
