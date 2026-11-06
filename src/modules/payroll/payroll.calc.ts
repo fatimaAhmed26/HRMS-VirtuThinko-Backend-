@@ -1,3 +1,4 @@
+// Builds one employee's payslip for a period (BR-4.4 .. BR-4.11)
 import { Prisma } from '@prisma/client';
 import prisma from '../../config/prisma';
 import { countDays, monthsOfService, toDateKey, type Tier } from '../leave/leave.rules';
@@ -26,12 +27,12 @@ export async function calculatePayslip(employeeId: number, period: string): Prom
     where: { id: employeeId },
     select: {
       id: true, employeeCode: true, firstName: true, lastName: true, jobTitle: true, country: true,
-      isNational: true, siNewScheme: true, hireDate: true, department: { select: { name: true } },
+      isNational: true, siNewScheme: true, hireDate: true, employmentType: true, department: { select: { name: true } },
     },
   });
   if (!emp) return { ok: false, reason: 'Employee not found' };
 
-  // salary comes from the single active contract 
+  // salary comes from the single active contract (BR-4.10)
   const contract = await prisma.contract.findFirst({
     where: { employeeId, status: 'active', startDate: { lte: end }, OR: [{ endDate: null }, { endDate: { gte: start } }] },
     orderBy: { startDate: 'desc' },
@@ -44,14 +45,18 @@ export async function calculatePayslip(employeeId: number, period: string): Prom
 
   const c = emp.country;
   const money = (v: Prisma.Decimal) => round(v, c).toFixed();
+  // interns get a flat monthly stipend (the contract's basic amount): no allowances, no social insurance
+  const isIntern = emp.employmentType === 'Intern';
 
-  //earnings from the contract
+  // earnings from the contract
   const basic = round(contract.basicSalary.times(factor), c);
-  const earnings: LineItem[] = [{ code: 'BASIC', name: 'Basic salary', amount: basic.toFixed(), source: 'contract' }];
-  if (!contract.housingAllowance.isZero()) {
+  const earnings: LineItem[] = [isIntern
+    ? { code: 'STIPEND', name: 'Monthly stipend', amount: basic.toFixed(), source: 'contract' }
+    : { code: 'BASIC', name: 'Basic salary', amount: basic.toFixed(), source: 'contract' }];
+  if (!isIntern && !contract.housingAllowance.isZero()) {
     earnings.push({ code: 'HOUSING', name: 'Housing allowance', amount: money(contract.housingAllowance.times(factor)), source: 'contract' });
   }
-  if (!contract.transportAllowance.isZero()) {
+  if (!isIntern && !contract.transportAllowance.isZero()) {
     earnings.push({ code: 'TRANSPORT', name: 'Transportation allowance', amount: money(contract.transportAllowance.times(factor)), source: 'contract' });
   }
 
@@ -76,7 +81,7 @@ export async function calculatePayslip(employeeId: number, period: string): Prom
     }
   }
 
-  // ── leave: automatic deduction only for unpaid leave (BR-4.5); partly-paid leave is flagged for HR (BR-4.3)
+  // leave: automatic deduction only for unpaid leave (BR-4.5); partly-paid leave is flagged for HR (BR-4.3)
   const leaves = await prisma.leaveRequest.findMany({
     where: { employeeId, status: 'approved', startDate: { lte: end }, endDate: { gte: start } },
     include: { leaveType: true },
@@ -104,17 +109,22 @@ export async function calculatePayslip(employeeId: number, period: string): Prom
     }
   }
 
-  const housing = earnings.find((e) => e.code === 'HOUSING')?.amount ?? '0';
-  const base = contributionBase(c, basic.plus(housing).plus(contributoryExtra));
-  const years = emp.hireDate ? monthsOfService(emp.hireDate, end) / 12 : 0;
-  const si = socialInsurance({ country: c, isNational: emp.isNational, siNewScheme: emp.siNewScheme, yearsOfService: years }, period);
-  for (const r of si.employee) {
-    deductions.push({ code: r.code, name: r.name, amount: money(base.times(r.rate).div(100)), source: 'statutory', rate: r.rate });
+  // social insurance on basic + housing + contributory allowances, capped (not for intern stipends)
+  const employerContributions: LineItem[] = [];
+  if (!isIntern) {
+    const housing = earnings.find((e) => e.code === 'HOUSING')?.amount ?? '0';
+    const base = contributionBase(c, basic.plus(housing).plus(contributoryExtra));
+    const years = emp.hireDate ? monthsOfService(emp.hireDate, end) / 12 : 0;
+    const si = socialInsurance({ country: c, isNational: emp.isNational, siNewScheme: emp.siNewScheme, yearsOfService: years }, period);
+    for (const r of si.employee) {
+      deductions.push({ code: r.code, name: r.name, amount: money(base.times(r.rate).div(100)), source: 'statutory', rate: r.rate });
+    }
+    for (const r of si.employer) {
+      employerContributions.push({ code: r.code, name: r.name, amount: money(base.times(r.rate).div(100)), source: 'statutory', rate: r.rate });
+    }
   }
-  const employerContributions: LineItem[] = si.employer.map((r) => ({
-    code: r.code, name: r.name, amount: money(base.times(r.rate).div(100)), source: 'statutory', rate: r.rate,
-  }));
 
+  // totals (BR-4.6, BR-4.7)
   const gross = sum(earnings);
   const totalDeductions = sum(deductions);
   const net = gross.minus(totalDeductions);
