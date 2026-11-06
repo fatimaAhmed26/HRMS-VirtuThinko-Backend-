@@ -25,6 +25,7 @@ function daysUntil(date: Date) {
 
 // Statuses from the requirements: Active, Expiring Soon, Expired, Renewed, Terminated
 // "expired" is also shown when an active contract's end date has passed
+// state (prototype): Active = current contract, Inactive = replaced by a newer contract, Ended = expired or terminated
 function present(c: ContractRow, windowDays: number) {
   let displayStatus = c.status;
   let daysLeft: number | null = null;
@@ -33,7 +34,8 @@ function present(c: ContractRow, windowDays: number) {
     if (daysLeft < 0) displayStatus = 'expired';
     else if (daysLeft <= windowDays) displayStatus = 'expiring_soon';
   }
-  return { ...c, contractNumber: c.contractNumber ?? `CT-${c.id}`, displayStatus, daysLeft };
+  const state = c.status === 'renewed' ? 'Inactive' : ['active', 'expiring_soon'].includes(displayStatus) ? 'Active' : 'Ended';
+  return { ...c, contractNumber: c.contractNumber ?? `CT-${c.id}`, displayStatus, state, daysLeft };
 }
 
 async function nextContractNumber(tx: Prisma.TransactionClient) {
@@ -56,7 +58,8 @@ export async function list(q: ListContractsQuery) {
     Object.assign(where, { status: 'active', endDate: { not: null, lte: until } });
   }
   const rows = await prisma.contract.findMany({ where, include: contractInclude, orderBy: [{ employeeId: 'asc' }, { startDate: 'desc' }] });
-  return rows.map((c) => present(c, window));
+  const result = rows.map((c) => present(c, window));
+  return q.state ? result.filter((c) => c.state === q.state) : result;
 }
 
 export async function getById(id: number) {
@@ -74,9 +77,16 @@ export async function mine(user: AuthUser) {
 
 // BR-4.10: a new contract becomes the single active one; the previous active contract is marked "renewed"
 export async function create(input: CreateContractInput, user: AuthUser, ip: string | null) {
-  const emp = await prisma.employee.findUnique({ where: { id: input.employeeId }, select: { id: true, country: true, status: true, jobTitle: true } });
+  const emp = await prisma.employee.findUnique({
+    where: { id: input.employeeId }, select: { id: true, country: true, status: true, jobTitle: true, employmentType: true },
+  });
   if (!emp) throw new HttpError(404, 'Employee not found');
   if (emp.status !== 'active') throw new HttpError(400, 'Employee is not active');
+  // interns are paid a stipend through an internship contract, and only interns get one
+  const isIntern = emp.employmentType === 'Intern';
+  if (isIntern && input.contractType !== 'internship') throw new HttpError(400, 'Interns need an internship contract (basicSalary = monthly stipend)');
+  if (!isIntern && input.contractType === 'internship') throw new HttpError(400, 'Internship contracts are only for interns');
+  if (isIntern) Object.assign(input, { housingAllowance: 0, transportAllowance: 0 });
   if (input.documentId) {
     const doc = await prisma.document.findFirst({ where: { id: input.documentId, deletedAt: null } });
     if (!doc || doc.employeeId !== emp.id) throw new HttpError(400, 'Contract document not found for this employee');
