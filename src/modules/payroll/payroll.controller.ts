@@ -2,7 +2,7 @@ import { Request } from 'express';
 import * as service from './payroll.service';
 import { writePayslipPdf } from './payslip.pdf';
 import {
-  commentSchema, createItemSchema, createItemTypeSchema, createRunSchema, listItemsQuerySchema, stopItemSchema,
+  commentSchema, createItemSchema, createItemTypeSchema, createRunSchema, listItemsQuerySchema, listRunsQuerySchema, stopItemSchema,
 } from './payroll.schema';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { parse } from '../../utils/validate';
@@ -17,13 +17,13 @@ function idParam(req: Request): number {
 }
 const ip = (req: Request) => req.ip ?? null;
 
-// runs
-export const listRuns = asyncHandler(async (_req, res) => res.json(await service.listRuns()));
+// runs (one per entity per month: ?entity=BH|SA&period=2026-11)
+export const listRuns = asyncHandler(async (req, res) => res.json(await service.listRuns(parse(listRunsQuerySchema, req.query))));
 export const getRun = asyncHandler(async (req, res) => res.json(await service.getRun(idParam(req))));
 
 export const createRun = asyncHandler(async (req, res) => {
-  const { period } = parse(createRunSchema, req.body);
-  res.status(201).json(await service.createRun(period, req.user!, ip(req)));
+  const { period, entity } = parse(createRunSchema, req.body);
+  res.status(201).json(await service.createRun(period, entity, req.user!, ip(req)));
 });
 
 export const recalculate = asyncHandler(async (req, res) => {
@@ -49,7 +49,7 @@ export const bankFile = asyncHandler(async (req, res) => {
   res.send(file.content);
 });
 
-// payslips (HR and payroll only - the routes require payroll:view)
+// payslips (HR and payroll only  the routes require payroll:view)
 export const getPayslip = asyncHandler(async (req, res) => res.json(await service.getPayslip(idParam(req))));
 
 export const payslipPdf = asyncHandler(async (req, res) => {
