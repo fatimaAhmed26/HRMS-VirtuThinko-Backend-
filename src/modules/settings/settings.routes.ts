@@ -9,6 +9,7 @@ import { HttpError } from '../../utils/httpError';
 import { logAudit } from '../../utils/audit';
 import { detectFileType, filePath, saveFile } from '../../utils/fileStorage';
 import { getSettings } from '../../utils/settings';
+import { runChecks } from '../../jobs/scheduler';
 
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:MM');
 const updateSchema = z.object({
@@ -66,5 +67,10 @@ router.post('/logo', requirePermission('settings:manage'), uploadSingle, asyncHa
   await logAudit({ actorUserId: req.user!.id, action: 'settings.logo', entity: 'Setting', entityId: 'companyLogo', ip: req.ip ?? null });
   res.status(201).json({ ok: true });
 }));
-
+// Run the hourly checks now (expiry and deployment alerts, scheduled announcements)  for admins and demos
+router.post('/run-checks', requirePermission('settings:manage'), asyncHandler(async (req, res) => {
+  await runChecks();
+  await logAudit({ actorUserId: req.user!.id, action: 'settings.run_checks', entity: 'Setting', entityId: 'scheduler', ip: req.ip ?? null });
+  res.json({ ok: true });
+}));
 export default router;
