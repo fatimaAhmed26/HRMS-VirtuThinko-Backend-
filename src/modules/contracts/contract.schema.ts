@@ -6,7 +6,7 @@ const money = z.coerce.number().min(0).max(1_000_000).multipleOf(0.001, 'At most
 export const createContractSchema = z
   .object({
     employeeId: z.number().int().positive(),
-    contractType: z.enum(['unlimited', 'limited']),
+    contractType: z.enum(['unlimited', 'limited', 'internship']), // internship = intern stipend (basicSalary)
     jobTitle: z.string().trim().max(100).optional(),
     startDate: isoDate,
     endDate: isoDate.optional(),
@@ -17,7 +17,7 @@ export const createContractSchema = z
     documentId: z.number().int().positive().optional(), // signed contract uploaded via /api/documents
     notes: z.string().trim().max(500).optional(),
   })
-  .refine((v) => v.contractType === 'unlimited' || v.endDate, { message: 'Limited contracts need an end date', path: ['endDate'] })
+  .refine((v) => v.contractType === 'unlimited' || v.endDate, { message: 'Limited and internship contracts need an end date', path: ['endDate'] })
   .refine((v) => !v.endDate || v.endDate > v.startDate, { message: 'End date must be after start date', path: ['endDate'] });
 
 export const terminateSchema = z.object({
@@ -28,6 +28,7 @@ export const listQuerySchema = z.object({
   employeeId: z.coerce.number().int().positive().optional(),
   status: z.enum(['active', 'expiring_soon', 'renewed', 'expired', 'terminated']).optional(),
   expiringWithinDays: z.coerce.number().int().min(0).max(365).optional(),
+  state: z.enum(['Active', 'Inactive', 'Ended']).optional(), // the prototype's three contract states
 });
 
 export type CreateContractInput = z.infer<typeof createContractSchema>;
