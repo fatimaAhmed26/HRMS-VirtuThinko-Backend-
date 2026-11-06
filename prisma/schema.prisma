@@ -346,8 +346,9 @@ model PayItem {
 
 model PayrollRun {
   id               Int       @id @default(autoincrement()) @map("payroll_run_id")
-  period           String    @unique @db.VarChar(7)               // "2026-11"
-  status           String    @default("draft") @db.VarChar(20)    // draft | under_review | approved | processed | paid
+  period           String    @db.VarChar(7)                       // "2026-11"
+  entity           String    @default("BH") @db.VarChar(2)        
+  status           String    @default("draft") @db.VarChar(20)    
   warnings         Json?                                          // employees skipped / needing review
   createdByUserId  Int       @map("created_by_user_id")
   approvedByUserId Int?      @map("approved_by_user_id")
@@ -359,6 +360,7 @@ model PayrollRun {
 
   payslips Payslip[]
 
+  @@unique([period, entity])
   @@map("payroll_runs")
 }
 
