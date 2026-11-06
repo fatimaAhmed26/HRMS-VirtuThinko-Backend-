@@ -76,7 +76,7 @@ echo -n "   officer approves own item -> "; curl -s -X POST $API/payroll/items/$
 for I in $I1 $I2 $I3; do curl -s -X POST $API/payroll/items/$I/approve -H "$ADMIN" | fmt "'   admin approved #'+o.id+' '+o.type.code+' '+o.amount"; done
 
 echo; echo "=== officer creates payroll $PERIOD (draft) ==="
-curl -s -X POST $API/payroll/runs -H "$OFFICER" -H "$JSON" -d "{\"period\":\"$PERIOD\"}" > /tmp/run.json
+curl -s -X POST $API/payroll/runs -H "$OFFICER" -H "$JSON" -d "{\"period\":\"$PERIOD\",\"entity\":\"BH\"}" > /tmp/run.json
 RUN=$(get .id < /tmp/run.json)
 fmt "'   run #'+o.id+' '+o.period+' -> '+o.status" < /tmp/run.json
 get ".totals.map(t=>'   '+t.currency+': '+t.employees+' employee(s), gross '+t.gross+', net '+t.net).join('\n')" < /tmp/run.json
