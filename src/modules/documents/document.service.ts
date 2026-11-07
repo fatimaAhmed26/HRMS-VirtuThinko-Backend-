@@ -79,8 +79,8 @@ export async function myDocuments(user: AuthUser) {
   });
 }
 
-export async function list(q: ListDocumentsQuery) {
-  const where: Prisma.DocumentWhereInput = { deletedAt: null };
+export async function list(q: ListDocumentsQuery, scope: Prisma.EmployeeWhereInput = {}) {
+  const where: Prisma.DocumentWhereInput = { deletedAt: null, employee: scope };
   if (q.employeeId) where.employeeId = q.employeeId;
   if (q.category) where.category = q.category;
   if (q.expiringWithinDays !== undefined) {

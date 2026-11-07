@@ -5,6 +5,7 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { parse } from '../../utils/validate';
 import { HttpError } from '../../utils/httpError';
 import { filePath } from '../../utils/fileStorage';
+import { assertEmployee, employeeScope } from '../../utils/scope';
 
 function idParam(req: Request): number {
   const id = Number(req.params.id);
@@ -16,6 +17,7 @@ const ip = (req: Request) => req.ip ?? null;
 
 export const upload = asyncHandler(async (req, res) => {
   const input = parse(uploadSchema, req.body ?? {});
+      if (input.employeeId) await assertEmployee(req.user!, input.employeeId);
   res.status(201).json(await service.upload(req.file!, input, req.user!, ip(req)));
 });
 
@@ -24,8 +26,7 @@ export const mine = asyncHandler(async (req, res) => {
 });
 
 export const list = asyncHandler(async (req, res) => {
-  res.json(await service.list(parse(listQuerySchema, req.query)));
-});
+    res.json(await service.list(parse(listQuerySchema, req.query), await employeeScope(req.user!)));});
 
 export const getById = asyncHandler(async (req, res) => {
   res.json(await service.getById(idParam(req), req.user!));
