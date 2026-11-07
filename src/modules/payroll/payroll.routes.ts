@@ -1,9 +1,29 @@
 import { Router } from 'express';
 import * as c from './payroll.controller';
 import { authenticate, requirePermission } from '../../middleware/auth';
+import prisma from '../../config/prisma';
+import { assertCountry, assertEmployee } from '../../utils/scope';
 
 const router = Router();
 router.use(authenticate);
+
+ router.param('id', (req, _res, next, value) => {
+    const id = Number(value);
+    if (!req.user || !Number.isInteger(id) || id <= 0) return next();
+    const check = async () => {
+      if (req.path.startsWith('/runs/')) {
+        const run = await prisma.payrollRun.findUnique({ where: { id }, select: { entity: true } });
+        if (run) await assertCountry(req.user!, run.entity);
+      } else if (req.path.startsWith('/payslips/')) {
+        const slip = await prisma.payslip.findUnique({ where: { id }, select: { country: true } });
+        if (slip) await assertCountry(req.user!, slip.country);
+      } else if (req.path.startsWith('/items/')) {
+        const item = await prisma.payItem.findUnique({ where: { id }, select: { employeeId: true } });
+        if (item) await assertEmployee(req.user!, item.employeeId);
+      }
+    };
+    check().then(() => next(), next);
+  });
 
 // payslips - HR and payroll only (employees do not see payroll in this system)
 router.get('/payslips/:id', requirePermission('payroll:view'), c.getPayslip);

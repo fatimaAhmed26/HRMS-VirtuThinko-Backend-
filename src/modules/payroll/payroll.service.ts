@@ -89,9 +89,9 @@ async function totalsFor(runIds: number[]) {
   }));
 }
 
-export async function listRuns(q: ListRunsQuery = {}) {
-  const runs = await prisma.payrollRun.findMany({
-    where: { entity: q.entity, period: q.period },
+  export async function listRuns(q: ListRunsQuery = {}, entities: string[] = ['BH', 'SA']) {
+    const runs = await prisma.payrollRun.findMany({
+      where: { entity: q.entity ?? { in: entities }, period: q.period },
     orderBy: [{ period: 'desc' }, { entity: 'asc' }],
   });
   const totals = await totalsFor(runs.map((r) => r.id));
@@ -229,8 +229,8 @@ export async function createItem(input: CreateItemInput, user: AuthUser, ip: Ip)
   });
 }
 
-export async function listItems(q: ListItemsQuery) {
-  const where: Prisma.PayItemWhereInput = {};
+  export async function listItems(q: ListItemsQuery, scope: Prisma.EmployeeWhereInput = {}) {
+    const where: Prisma.PayItemWhereInput = { employee: scope };
   if (q.employeeId) where.employeeId = q.employeeId;
   if (q.status) where.status = q.status;
   if (q.period) Object.assign(where, { fromPeriod: { lte: q.period }, OR: [{ recurring: true, toPeriod: null }, { toPeriod: { gte: q.period } }] });

@@ -9,6 +9,7 @@ import { parse } from '../../utils/validate';
 import { HttpError } from '../../utils/httpError';
 import { logAudit } from '../../utils/audit';
 import { getCompany } from '../../utils/settings';
+import { assertCountry, assertEmployee, employeeScope, entitiesOf } from '../../utils/scope';
 
 function idParam(req: Request): number {
   const id = Number(req.params.id);
@@ -17,12 +18,17 @@ function idParam(req: Request): number {
 }
 const ip = (req: Request) => req.ip ?? null;
 
-// runs (one per entity per month: ?entity=BH|SA&period=2026-11)
-export const listRuns = asyncHandler(async (req, res) => res.json(await service.listRuns(parse(listRunsQuerySchema, req.query))));
+// runs (one per entity per month: ?entity=BH|SA&period=2026-11) - only the user's entities
+export const listRuns = asyncHandler(async (req, res) => {
+  const q = parse(listRunsQuerySchema, req.query);
+  if (q.entity) await assertCountry(req.user!, q.entity);
+  res.json(await service.listRuns(q, await entitiesOf(req.user!)));
+});
 export const getRun = asyncHandler(async (req, res) => res.json(await service.getRun(idParam(req))));
 
 export const createRun = asyncHandler(async (req, res) => {
   const { period, entity } = parse(createRunSchema, req.body);
+  await assertCountry(req.user!, entity);
   res.status(201).json(await service.createRun(period, entity, req.user!, ip(req)));
 });
 
@@ -49,7 +55,7 @@ export const bankFile = asyncHandler(async (req, res) => {
   res.send(file.content);
 });
 
-// payslips (HR and payroll only  the routes require payroll:view)
+// payslips (HR and payroll only - the routes require payroll:view)
 export const getPayslip = asyncHandler(async (req, res) => res.json(await service.getPayslip(idParam(req))));
 
 export const payslipPdf = asyncHandler(async (req, res) => {
@@ -84,9 +90,13 @@ export const createItemType = asyncHandler(async (req, res) => {
   res.status(201).json(await service.createItemType(parse(createItemTypeSchema, req.body), req.user!, ip(req)));
 });
 
-export const listItems = asyncHandler(async (req, res) => res.json(await service.listItems(parse(listItemsQuerySchema, req.query))));
+export const listItems = asyncHandler(async (req, res) => {
+  res.json(await service.listItems(parse(listItemsQuerySchema, req.query), await employeeScope(req.user!)));
+});
 export const createItem = asyncHandler(async (req, res) => {
-  res.status(201).json(await service.createItem(parse(createItemSchema, req.body), req.user!, ip(req)));
+  const input = parse(createItemSchema, req.body);
+  await assertEmployee(req.user!, input.employeeId);
+  res.status(201).json(await service.createItem(input, req.user!, ip(req)));
 });
 export const approveItem = asyncHandler(async (req, res) => res.json(await service.decideItem(idParam(req), 'approved', req.user!, ip(req))));
 export const rejectItem = asyncHandler(async (req, res) => res.json(await service.decideItem(idParam(req), 'rejected', req.user!, ip(req))));
