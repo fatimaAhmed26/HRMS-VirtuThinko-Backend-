@@ -5,7 +5,7 @@ interface LeaveSummary {
   id: number;
   status: string;
   days: number;
-  employee: { id: number; firstName: string; lastName: string; managerId: number | null };
+  employee: { id: number; firstName: string; lastName: string; managerId: number | null; country: string };
   leaveType: { name: string };
 }
 
@@ -18,8 +18,7 @@ async function notifyApprovers(r: LeaveSummary) {
       type: 'leave', title: `Leave request from ${who}`, body: label(r), link: `/leave/requests/${r.id}`,
     });
   } else if (r.status === 'pending_hr') {
-    await notifyPermission('leave:manage', { type: 'leave', title: `Leave request awaiting HR: ${who}`, body: label(r), link: `/leave/requests/${r.id}` });
-  }
+    await notifyPermission('leave:manage', { type: 'leave', title: `Leave request awaiting HR: ${who}`, body: label(r), link: `/leave/requests/${r.id}` }, r.employee.country);  }
 }
 
 export async function onLeaveRequested(r: LeaveSummary) {

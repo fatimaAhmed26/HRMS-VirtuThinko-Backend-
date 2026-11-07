@@ -9,6 +9,7 @@ import {
 import { asyncHandler } from '../../utils/asyncHandler';
 import { parse } from '../../utils/validate';
 import { HttpError } from '../../utils/httpError';
+import { assertCountry, employeeScope, entitiesOf } from '../../utils/scope';
 
 function idParam(req: Request, name = 'id'): number {
   const id = Number(req.params[name]);
@@ -23,7 +24,7 @@ async function approverName(req: Request) {
   return u?.username ?? `user ${req.user!.id}`;
 }
 
-// types & holidays
+// types & holidays (HR can only change their own entity's rules)
 export const listTypes = asyncHandler(async (req, res) => {
   let { country } = parse(typesQuerySchema, req.query);
   if (!country && req.user!.employeeId) {
@@ -34,6 +35,8 @@ export const listTypes = asyncHandler(async (req, res) => {
 });
 
 export const updateType = asyncHandler(async (req, res) => {
+  const type = await prisma.leaveType.findUnique({ where: { id: idParam(req) }, select: { country: true } });
+  if (type) await assertCountry(req.user!, type.country);
   res.json(await service.updateType(idParam(req), parse(updateTypeSchema, req.body), req.user!, ip(req)));
 });
 
@@ -43,15 +46,19 @@ export const listHolidays = asyncHandler(async (req, res) => {
 });
 
 export const addHoliday = asyncHandler(async (req, res) => {
-  res.status(201).json(await service.addHoliday(parse(holidaySchema, req.body)));
+  const input = parse(holidaySchema, req.body);
+  await assertCountry(req.user!, input.country);
+  res.status(201).json(await service.addHoliday(input));
 });
 
 export const deleteHoliday = asyncHandler(async (req, res) => {
+  const holiday = await prisma.publicHoliday.findUnique({ where: { id: idParam(req) }, select: { country: true } });
+  if (holiday) await assertCountry(req.user!, holiday.country);
   await service.deleteHoliday(idParam(req));
   res.status(204).end();
 });
 
-// balances
+// ── balances
 export const myBalances = asyncHandler(async (req, res) => {
   if (!req.user!.employeeId) throw new HttpError(400, 'Your account is not linked to an employee record');
   res.json(await service.balances(req.user!.employeeId));
@@ -68,7 +75,7 @@ export const employeeBalances = asyncHandler(async (req, res) => {
   res.json(await service.balances(employeeId));
 });
 
-//  requests
+// requests
 export const create = asyncHandler(async (req, res) => {
   const r = await service.createRequest(parse(createRequestSchema, req.body), req.user!, ip(req));
   await onLeaveRequested(r);
@@ -80,11 +87,11 @@ export const mine = asyncHandler(async (req, res) => {
 });
 
 export const pending = asyncHandler(async (req, res) => {
-  res.json(await service.pendingApprovals(req.user!));
+  res.json(await service.pendingApprovals(req.user!, await entitiesOf(req.user!)));
 });
 
 export const list = asyncHandler(async (req, res) => {
-  res.json(await service.listRequests(parse(listQuerySchema, req.query)));
+  res.json(await service.listRequests(parse(listQuerySchema, req.query), await employeeScope(req.user!)));
 });
 
 export const getById = asyncHandler(async (req, res) => {

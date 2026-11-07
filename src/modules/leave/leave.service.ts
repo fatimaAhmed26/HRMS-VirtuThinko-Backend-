@@ -228,13 +228,12 @@ export async function myRequests(user: AuthUser) {
 }
 
 // Requests waiting for this user's decision
-export async function pendingApprovals(user: AuthUser) {
-  const or: Prisma.LeaveRequestWhereInput[] = [];
-  if (user.employeeId && user.permissions.includes('leave:approve')) {
-    or.push({ status: 'pending_manager', employee: { managerId: user.employeeId } });
-  }
-  if (canManage(user)) or.push({ status: 'pending_hr' });
-  if (or.length === 0) return [];
+ export async function pendingApprovals(user: AuthUser, entities: string[] = ['BH', 'SA']) {
+    const or: Prisma.LeaveRequestWhereInput[] = [];
+    if (user.employeeId && user.permissions.includes('leave:approve')) {
+      or.push({ status: 'pending_manager', employee: { managerId: user.employeeId } });
+    }
+    if (canManage(user)) or.push({ status: 'pending_hr', employee: { country: { in: entities } } });
 
   return prisma.leaveRequest.findMany({
     where: { OR: or, NOT: user.employeeId ? { employeeId: user.employeeId } : undefined },
@@ -243,13 +242,12 @@ export async function pendingApprovals(user: AuthUser) {
   });
 }
 
-export async function listRequests(q: ListRequestsQuery) {
-  const where: Prisma.LeaveRequestWhereInput = {};
+  export async function listRequests(q: ListRequestsQuery, scope: Prisma.EmployeeWhereInput = {}) {
+    const where: Prisma.LeaveRequestWhereInput = { employee: scope };
   if (q.status) where.status = q.status;
   if (q.employeeId) where.employeeId = q.employeeId;
   if (q.leaveTypeId) where.leaveTypeId = q.leaveTypeId;
-  if (q.departmentId) where.employee = { departmentId: q.departmentId };
-  if (q.from) where.endDate = { gte: q.from };
+  if (q.departmentId) where.employee = { ...scope, departmentId: q.departmentId };  if (q.from) where.endDate = { gte: q.from };
   if (q.to) where.startDate = { lte: q.to };
 
   const [total, items] = await prisma.$transaction([

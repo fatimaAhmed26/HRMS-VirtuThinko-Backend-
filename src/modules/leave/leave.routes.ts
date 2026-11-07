@@ -1,10 +1,14 @@
 import { Router } from 'express';
 import * as c from './leave.controller';
 import { authenticate, requirePermission } from '../../middleware/auth';
+import prisma from '../../config/prisma';
+import { scopeParam } from '../../utils/scope';
 
 const router = Router();
 router.use(authenticate);
-
+const requestScope = scopeParam(async (id) => (await prisma.leaveRequest.findUnique({ where: { id }, select: { employeeId: true } }))?.employeeId);
+  router.param('id', (req, res, next, value) => (req.path.startsWith('/requests/') ? requestScope(req, res, next, value) : next()));
+  router.param('employeeId', scopeParam(async (id) => id));
 // leave types & public holidays
 router.get('/types', c.listTypes);
 router.patch('/types/:id', requirePermission('leave:manage'), c.updateType);
