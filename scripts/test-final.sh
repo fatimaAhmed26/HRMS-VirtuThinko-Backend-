@@ -84,7 +84,7 @@ curl -s -X POST $API/notifications/read-all -H "$SARA" | fmt "'   read all -> '+
 echo "   Admin's latest:"; curl -s "$API/notifications?pageSize=5" -H "$ADMIN" | get ".items.map(n=>'     ['+n.type+'] '+n.title).join('\n')"
 
 echo; echo "=== 7. dashboards ==="
-curl -s $API/dashboard/admin -H "$ADMIN" | fmt "'   admin: '+o.employees.active+' active, '+o.employees.onLeaveToday+' on leave today | pending: leave '+(o.pending.leaveWithManager+o.pending.leaveWithHr)+', requests '+o.pending.hrRequests+', pay items '+o.pending.payItemsToApprove+' | expiring: '+o.expiring.contracts+' contract(s), '+o.expiring.documents+' document(s) | payroll '+(o.payroll.latestRun?o.payroll.latestRun.period+' '+o.payroll.latestRun.status:'none')"
+curl -s $API/dashboard/admin -H "$ADMIN" | fmt "'   admin: '+o.employees.active+' active, '+o.employees.onLeaveToday+' on leave today | pending: leave '+(o.pending.leaveWithManager+o.pending.leaveWithHr)+', requests '+o.pending.hrRequests+', pay items '+o.pending.payItemsToApprove+' | expiring: '+o.expiring.contracts+' contract(s), '+o.expiring.documents+' document(s) | payroll '+(o.payroll.latestRuns.map(r=>r.entity+' '+r.period+' '+r.status).join(', ')||'none')"
 curl -s $API/dashboard/me -H "$SARA" | fmt "'   Sara home: '+o.employee.firstName+' | leave left '+o.cards.remainingLeave+' | pending '+o.cards.pendingRequests+' | latest payslip '+(o.cards.latestPayslip?o.cards.latestPayslip.period+' '+o.cards.latestPayslip.net+' '+o.cards.latestPayslip.currency:'-')+' | '+o.announcements.length+' announcement(s)'"
 echo -n "   Omar opens admin dashboard -> "; curl -s $API/dashboard/admin -H "$OMAR" | get .message
 
