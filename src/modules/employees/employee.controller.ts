@@ -1,9 +1,10 @@
 import { Request } from 'express';
 import * as service from './employee.service';
+import { createEmployeeSchema, listQuerySchema, statusSchema, updateEmployeeSchema, updateMeSchema } from './employee.schema';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { parse } from '../../utils/validate';
 import { HttpError } from '../../utils/httpError';
-import { createEmployeeSchema, listQuerySchema, statusSchema, updateEmployeeSchema, updateMeSchema } from './employee.schema';
+import { assertCountry, employeeScope } from '../../utils/scope';
 
 function actorFrom(req: Request): service.Actor {
   const perms = req.user!.permissions;
@@ -20,8 +21,9 @@ function idParam(req: Request): number {
   return id;
 }
 
+// only employees of the user's entities (BH / SA)
 export const list = asyncHandler(async (req, res) => {
-  res.json(await service.list(parse(listQuerySchema, req.query)));
+  res.json(await service.list(parse(listQuerySchema, req.query), await employeeScope(req.user!)));
 });
 
 // The logged-in employee's own profile (self-service)
@@ -37,11 +39,13 @@ export const getById = asyncHandler(async (req, res) => {
 
 export const create = asyncHandler(async (req, res) => {
   const input = parse(createEmployeeSchema, req.body);
+  await assertCountry(req.user!, input.country ?? 'BH'); // HR can only add staff to their own entity
   res.status(201).json(await service.create(input, actorFrom(req)));
 });
 
 export const update = asyncHandler(async (req, res) => {
   const input = parse(updateEmployeeSchema, req.body);
+  if (input.country) await assertCountry(req.user!, input.country); // cannot move someone to an entity they don't manage
   res.json(await service.update(idParam(req), input, actorFrom(req)));
 });
 
@@ -54,6 +58,7 @@ export const history = asyncHandler(async (req, res) => {
   res.json(await service.history(idParam(req)));
 });
 
+// Employee updates their own contact details
 export const updateMe = asyncHandler(async (req, res) => {
   const employeeId = req.user!.employeeId;
   if (!employeeId) throw new HttpError(404, 'No employee record is linked to this account');

@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import * as c from './employee.controller';
 import { authenticate, requirePermission } from '../../middleware/auth';
+import { scopeParam } from '../../utils/scope';
 
 const router = Router();
 
 router.use(authenticate); // every route below needs a logged-in user
+router.param('id', scopeParam(async (id) => id));
 
 router.get('/', requirePermission('employee:view'), c.list);
 router.get('/me', c.me); // must be before '/:id'

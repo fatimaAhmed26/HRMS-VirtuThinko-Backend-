@@ -72,8 +72,8 @@ async function nextEmployeeCode(tx: Prisma.TransactionClient) {
   }
 }
 
-export async function list(q: ListEmployeesQuery) {
-  const where: Prisma.EmployeeWhereInput = {};
+export async function list(q: ListEmployeesQuery, scope: Prisma.EmployeeWhereInput = {}) {
+  const where: Prisma.EmployeeWhereInput = { ...scope };
   if (q.status) where.status = q.status;
   if (q.departmentId) where.departmentId = q.departmentId;
   if (q.jobTitle) where.jobTitle = { contains: q.jobTitle };
