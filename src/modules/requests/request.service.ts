@@ -14,8 +14,7 @@ type Ip = string | null;
 const OPEN = ['pending', 'in_progress', 'approved'];
 
 const requestInclude = {
-  employee: { select: { id: true, employeeCode: true, firstName: true, lastName: true, department: { select: { name: true } } } },
-  type: { select: { id: true, code: true, name: true, category: true } },
+  employee: { select: { id: true, employeeCode: true, firstName: true, lastName: true, country: true, department: { select: { name: true } } } },  type: { select: { id: true, code: true, name: true, category: true } },
   attachment: { select: { id: true, originalName: true } },
   resultDocument: { select: { id: true, originalName: true, visibleToEmployee: true } },
 } satisfies Prisma.EmployeeRequestInclude;
@@ -62,9 +61,9 @@ export async function create(input: CreateRequestInput, user: AuthUser, ip: Ip) 
   });
 
   await notifyPermission('request:process', {
-    type: 'request', title: `New ${type.name.toLowerCase()} request`,
-    body: `${r.employee.firstName} ${r.employee.lastName} - ${input.purpose}`, link: `/requests/${r.id}`,
-  });
+      type: 'request', title: `New ${type.name.toLowerCase()} request`,
+      body: `${r.employee.firstName} ${r.employee.lastName} - ${input.purpose}`, link: `/requests/${r.id}`,
+    }, r.employee.country);
   return { ...r, reference: reference(r.id) };
 }
 
@@ -74,8 +73,8 @@ export async function mine(user: AuthUser) {
   return rows.map((r) => ({ ...r, reference: reference(r.id) }));
 }
 
-export async function list(q: ListRequestsQuery) {
-  const where: Prisma.EmployeeRequestWhereInput = {};
+  export async function list(q: ListRequestsQuery, scope: Prisma.EmployeeWhereInput = {}) {
+  const where: Prisma.EmployeeRequestWhereInput = { employee: scope };
   if (q.status) where.status = q.status;
   if (q.typeId) where.typeId = q.typeId;
   if (q.employeeId) where.employeeId = q.employeeId;

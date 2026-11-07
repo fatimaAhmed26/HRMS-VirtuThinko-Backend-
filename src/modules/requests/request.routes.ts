@@ -5,6 +5,8 @@ import { authenticate, requirePermission } from '../../middleware/auth';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { parse } from '../../utils/validate';
 import { HttpError } from '../../utils/httpError';
+import prisma from '../../config/prisma';
+import { employeeScope, scopeParam } from '../../utils/scope';
 
 function idParam(req: Request): number {
   const id = Number(req.params.id);
@@ -15,6 +17,9 @@ const ip = (req: Request) => req.ip ?? null;
 
 const router = Router();
 router.use(authenticate);
+
+const requestScope = scopeParam(async (id) => (await prisma.employeeRequest.findUnique({ where: { id }, select: { employeeId: true } }))?.employeeId);
+  router.param('id', (req, res, next, value) => (req.path.startsWith('/types/') ? next() : requestScope(req, res, next, value)));
 
 // request types & letter templates
 router.get('/types', asyncHandler(async (_req, res) => res.json(await service.listTypes())));
@@ -31,8 +36,7 @@ router.post('/:id/cancel', asyncHandler(async (req, res) => res.json(await servi
 
 // HR
 router.get('/', requirePermission('request:view', 'request:process'), asyncHandler(async (req, res) => {
-  res.json(await service.list(parse(listQuerySchema, req.query)));
-}));
+    res.json(await service.list(parse(listQuerySchema, req.query), await employeeScope(req.user!)));}));
 router.get('/:id', asyncHandler(async (req, res) => res.json(await service.get(idParam(req), req.user!))));
 router.post('/:id/start', requirePermission('request:process'), asyncHandler(async (req, res) => {
   res.json(await service.start(idParam(req), req.user!, ip(req)));
