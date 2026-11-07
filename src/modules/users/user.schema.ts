@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { passwordSchema } from '../../utils/password';
+  import { ENTITY_SCOPES } from '../../utils/scope';
 
 const roleIds = z.array(z.number().int().positive()).min(1, 'Assign at least one role');
 
@@ -9,13 +10,13 @@ export const createUserSchema = z.object({
   email: z.string().trim().toLowerCase().email('Invalid email').max(100).optional(), // defaults to the employee's email
   password: passwordSchema.optional(),          // if empty, a temporary password is generated
   employeeId: z.number().int().positive().optional().nullable(),
-  roleIds,
+  roleIds,entityScope: z.enum(ENTITY_SCOPES).optional(),
 });
 
 export const updateUserSchema = z.object({
   username: createUserSchema.shape.username.optional(),
   email: z.string().trim().toLowerCase().email('Invalid email').max(100).optional(),
-  employeeId: z.number().int().positive().nullable().optional(), // null = unlink
+  employeeId: z.number().int().positive().nullable().optional(),entityScope: z.enum(ENTITY_SCOPES).optional(),// null = unlink
 });
 
 export const rolesSchema = z.object({ roleIds });

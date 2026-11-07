@@ -18,6 +18,7 @@ const userSelect = {
   username: true,
   email: true,
   status: true,
+  entityScope: true,
   lastLoginAt: true,
   createdAt: true,
   updatedAt: true,
@@ -116,6 +117,7 @@ export async function create(input: CreateUserInput, actor: Actor) {
         email,
         passwordHash,
         employeeId: employee?.id ?? null,
+        entityScope: input.entityScope ?? 'ALL',
         roles: { create: roles.map((r) => ({ roleId: r.id })) },
       },
       select: userSelect,
@@ -126,8 +128,7 @@ export async function create(input: CreateUserInput, actor: Actor) {
         action: 'user.create',
         entity: 'User',
         entityId: u.id,
-        changes: { username: u.username, employeeId: u.employee?.id ?? null, roles: roles.map((r) => r.name) },
-        ip: actor.ip,
+        changes: { username: u.username, employeeId: u.employee?.id ?? null, roles: roles.map((r) => r.name), entityScope: u.entityScope },        ip: actor.ip,
       },
       tx
     );
