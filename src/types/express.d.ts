@@ -3,6 +3,7 @@ export interface AuthUser {
   employeeId: number | null;
   roles: string[];
   permissions: string[];
+  entities?: string[];
 }
 
 declare global {
