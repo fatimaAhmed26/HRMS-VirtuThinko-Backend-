@@ -46,9 +46,9 @@ async function nextContractNumber(tx: Prisma.TransactionClient) {
   return `${prefix}${String(n + 1).padStart(4, '0')}`;
 }
 
-export async function list(q: ListContractsQuery) {
+export async function list(q: ListContractsQuery, scope: Prisma.EmployeeWhereInput = {}) {
   const window = await alertDays();
-  const where: Prisma.ContractWhereInput = {};
+  const where: Prisma.ContractWhereInput = { employee: scope };
   if (q.employeeId) where.employeeId = q.employeeId;
   if (q.status && q.status !== 'expiring_soon') where.status = q.status;
   const days = q.status === 'expiring_soon' ? window : q.expiringWithinDays;
