@@ -7,6 +7,7 @@ import { logAudit } from '../../utils/audit';
 import { getCompany } from '../../utils/settings';
 import { REPORTS, reportQuerySchema } from './report.definitions';
 import { toExcel, toPdf } from './report.render';
+import { assertCountry, entitiesOf } from '../../utils/scope';
 
 const router = Router();
 router.use(authenticate, requirePermission('report:view'));
@@ -27,6 +28,9 @@ router.get('/:name', asyncHandler(async (req, res) => {
   if (!def.permissions.every((p) => perms.includes(p))) throw new HttpError(403, 'You do not have permission for this report');
 
   const q = parse(reportQuerySchema, req.query);
+      const entities = await entitiesOf(req.user!);
+    if (q.country) await assertCountry(req.user!, q.country);
+    else if (entities.length === 1) q.country = entities[0] as 'BH' | 'SA';
   const result = await def.build(q);
   if (q.format === 'json') {
     res.json(result);

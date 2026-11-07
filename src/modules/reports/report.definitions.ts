@@ -44,6 +44,7 @@ interface ReportDef {
   build: (q: ReportQuery) => Promise<ReportResult>;
 }
 
+// Every report accepts ?country=BH|SA; entity-scoped users are always limited to their entity (report.routes.ts)
 export const REPORTS: Record<string, ReportDef> = {
   employees: {
     title: 'Employee list',
@@ -72,11 +73,11 @@ export const REPORTS: Record<string, ReportDef> = {
 
   headcount: {
     title: 'Headcount by department',
-    description: 'Active and inactive employees per department',
+    description: 'Active and inactive employees per department (filter: country)',
     permissions: ['report:view'],
-    async build() {
+    async build(q) {
       const [groups, depts] = await Promise.all([
-        prisma.employee.groupBy({ by: ['departmentId', 'status'], _count: { _all: true } }),
+        prisma.employee.groupBy({ by: ['departmentId', 'status'], where: { country: q.country }, _count: { _all: true } }),
         prisma.department.findMany({ select: { id: true, name: true } }),
       ]);
       const byDept = new Map<string, { active: number; inactive: number }>();
@@ -94,7 +95,7 @@ export const REPORTS: Record<string, ReportDef> = {
         total: rows.reduce((s, r) => s + Number(r.total), 0),
       });
       return {
-        title: 'Headcount by department',
+        title: 'Headcount by department', subtitle: q.country,
         columns: [{ key: 'department', label: 'Department', width: 26 }, { key: 'active', label: 'Active', numeric: true }, { key: 'inactive', label: 'Inactive', numeric: true }, { key: 'total', label: 'Total', numeric: true }],
         rows,
       };
@@ -103,12 +104,12 @@ export const REPORTS: Record<string, ReportDef> = {
 
   turnover: {
     title: 'Turnover',
-    description: 'Joiners, leavers and turnover rate per department (filters: from, to)',
+    description: 'Joiners, leavers and turnover rate per department (filters: from, to, country)',
     permissions: ['report:view'],
     async build(q) {
       const r = range(q);
       const [emps, deactivations, depts] = await Promise.all([
-        prisma.employee.findMany({ select: { id: true, departmentId: true, hireDate: true, status: true } }),
+        prisma.employee.findMany({ where: { country: q.country }, select: { id: true, departmentId: true, hireDate: true, status: true } }),
         prisma.auditLog.findMany({ where: { entity: 'Employee', action: 'employee.deactivate' }, orderBy: { createdAt: 'asc' } }),
         prisma.department.findMany({ select: { id: true, name: true } }),
       ]);
@@ -146,14 +147,14 @@ export const REPORTS: Record<string, ReportDef> = {
 
   'leave-requests': {
     title: 'Leave requests',
-    description: 'Leave requests in a date range (filters: from, to, status, departmentId)',
+    description: 'Leave requests in a date range (filters: from, to, status, departmentId, country)',
     permissions: ['report:view', 'leave:view'],
     async build(q) {
       const r = range(q);
       const rows = await prisma.leaveRequest.findMany({
         where: {
           startDate: { lte: r.toEnd }, endDate: { gte: r.from }, status: q.status,
-          employee: q.departmentId ? { departmentId: q.departmentId } : undefined,
+          employee: { departmentId: q.departmentId, country: q.country },
         },
         include: { employee: { include: { department: { select: { name: true } } } }, leaveType: { select: { name: true } } },
         orderBy: { startDate: 'asc' },
@@ -175,11 +176,11 @@ export const REPORTS: Record<string, ReportDef> = {
 
   'leave-balances': {
     title: 'Leave balances',
-    description: 'Annual and sick leave balances for active employees (filters: year, departmentId)',
+    description: 'Annual and sick leave balances for active employees (filters: year, departmentId, country)',
     permissions: ['report:view', 'leave:view'],
     async build(q) {
       const year = q.year ?? new Date().getUTCFullYear();
-      const emps = await prisma.employee.findMany({ where: { status: 'active', departmentId: q.departmentId }, select: { id: true }, orderBy: { employeeCode: 'asc' } });
+      const emps = await prisma.employee.findMany({ where: { status: 'active', departmentId: q.departmentId, country: q.country }, select: { id: true }, orderBy: { employeeCode: 'asc' } });
       const rows: Record<string, Cell>[] = [];
       for (const e of emps) {
         const b = await balances(e.id, year);
@@ -233,12 +234,12 @@ export const REPORTS: Record<string, ReportDef> = {
 
   'allowances-deductions': {
     title: 'Allowances and deductions',
-    description: 'Approved and pending entries active in a month (filters: period, status)',
+    description: 'Approved and pending entries active in a month (filters: period, status, country)',
     permissions: ['report:view', 'payroll:view'],
     async build(q) {
       const period = q.period ?? new Date().toISOString().slice(0, 7);
       const items = await prisma.payItem.findMany({
-        where: { status: q.status, fromPeriod: { lte: period }, OR: [{ recurring: true, toPeriod: null }, { toPeriod: { gte: period } }] },
+        where: { status: q.status, employee: { country: q.country }, fromPeriod: { lte: period }, OR: [{ recurring: true, toPeriod: null }, { toPeriod: { gte: period } }] },
         include: { employee: true, type: true },
         orderBy: [{ employeeId: 'asc' }, { id: 'asc' }],
       });
@@ -259,13 +260,13 @@ export const REPORTS: Record<string, ReportDef> = {
 
   'contract-expiry': {
     title: 'Contract expiry',
-    description: 'Active contracts ending within N days (filter: days, default 60)',
+    description: 'Active contracts ending within N days (filters: days (default 60), country)',
     permissions: ['report:view', 'contract:view'],
     async build(q) {
       const until = todayUtc();
       until.setUTCDate(until.getUTCDate() + q.days);
       const rows = await prisma.contract.findMany({
-        where: { status: 'active', endDate: { not: null, lte: until } },
+        where: { status: 'active', endDate: { not: null, lte: until }, employee: { country: q.country } },
         include: { employee: true },
         orderBy: { endDate: 'asc' },
       });
@@ -282,13 +283,13 @@ export const REPORTS: Record<string, ReportDef> = {
 
   'document-expiry': {
     title: 'Document expiry',
-    description: 'Documents (CPR, passport, visa...) expiring within N days (filter: days, default 60)',
+    description: 'Documents (CPR, passport, visa...) expiring within N days (filters: days (default 60), country)',
     permissions: ['report:view', 'document:view'],
     async build(q) {
       const until = todayUtc();
       until.setUTCDate(until.getUTCDate() + q.days);
       const rows = await prisma.document.findMany({
-        where: { deletedAt: null, expiryDate: { not: null, lte: until } },
+        where: { deletedAt: null, expiryDate: { not: null, lte: until }, employee: { country: q.country } },
         include: { employee: true },
         orderBy: { expiryDate: 'asc' },
       });
@@ -305,12 +306,12 @@ export const REPORTS: Record<string, ReportDef> = {
 
   requests: {
     title: 'Employee requests',
-    description: 'HR requests and certificates (filters: from, to, status)',
+    description: 'HR requests and certificates (filters: from, to, status, country)',
     permissions: ['report:view', 'request:view'],
     async build(q) {
       const r = range(q);
       const rows = await prisma.employeeRequest.findMany({
-        where: { createdAt: { gte: r.from, lte: r.toEnd }, status: q.status },
+        where: { createdAt: { gte: r.from, lte: r.toEnd }, status: q.status, employee: { country: q.country } },
         include: { employee: true, type: true },
         orderBy: { createdAt: 'asc' },
       });
