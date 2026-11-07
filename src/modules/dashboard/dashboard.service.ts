@@ -3,44 +3,55 @@ import { getSettings } from '../../utils/settings';
 import type { AuthUser } from '../../types/express';
 import { balances } from '../leave/leave.service';
 import { forMe } from '../announcements/announcement.service';
+import { employeeScope, entitiesOf } from '../../utils/scope';
 
 const todayUtc = () => new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
 const currentPeriod = () => new Date().toISOString().slice(0, 7);
 
+// HR dashboard - only counts the entities this user can see (BH / SA / both)
 export async function adminDashboard(user: AuthUser) {
   const today = todayUtc();
   const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
   const window = Number((await getSettings()).expiryAlertDays) || 30;
   const until = new Date(today);
   until.setUTCDate(until.getUTCDate() + window);
+  const entities = await entitiesOf(user);
+  const emp = await employeeScope(user);
 
-  const [statusCounts, onLeave, newHires, pendingLeave, pendingRequests, pendingPayItems, expiringContracts, expiringDocuments, latestRun, byDept, departments] =
+  const [statusCounts, onLeave, newHires, pendingLeave, pendingRequests, pendingPayItems, expiringContracts, expiringDocuments, runs, byDept, departments] =
     await Promise.all([
-      prisma.employee.groupBy({ by: ['status'], _count: { _all: true } }),
+      prisma.employee.groupBy({ by: ['status'], where: emp, _count: { _all: true } }),
       prisma.leaveRequest.findMany({
-        where: { status: 'approved', startDate: { lte: today }, endDate: { gte: today } },
+        where: { status: 'approved', startDate: { lte: today }, endDate: { gte: today }, employee: emp },
         distinct: ['employeeId'], select: { employeeId: true },
       }),
-      prisma.employee.count({ where: { hireDate: { gte: monthStart } } }),
-      prisma.leaveRequest.groupBy({ by: ['status'], where: { status: { in: ['pending_manager', 'pending_hr'] } }, _count: { _all: true } }),
-      prisma.employeeRequest.count({ where: { status: { in: ['pending', 'in_progress', 'approved'] } } }),
-      prisma.payItem.count({ where: { status: 'pending' } }),
-      prisma.contract.count({ where: { status: 'active', endDate: { not: null, lte: until } } }),
-      prisma.document.count({ where: { deletedAt: null, expiryDate: { not: null, lte: until } } }),
-      prisma.payrollRun.findFirst({ orderBy: { period: 'desc' } }),
-      prisma.employee.groupBy({ by: ['departmentId'], where: { status: 'active' }, _count: { _all: true } }),
+      prisma.employee.count({ where: { ...emp, hireDate: { gte: monthStart } } }),
+      prisma.leaveRequest.groupBy({ by: ['status'], where: { status: { in: ['pending_manager', 'pending_hr'] }, employee: emp }, _count: { _all: true } }),
+      prisma.employeeRequest.count({ where: { status: { in: ['pending', 'in_progress', 'approved'] }, employee: emp } }),
+      prisma.payItem.count({ where: { status: 'pending', employee: emp } }),
+      prisma.contract.count({ where: { status: 'active', endDate: { not: null, lte: until }, employee: emp } }),
+      prisma.document.count({ where: { deletedAt: null, expiryDate: { not: null, lte: until }, employee: emp } }),
+      prisma.payrollRun.findMany({ where: { entity: { in: entities } }, orderBy: { period: 'desc' } }),
+      prisma.employee.groupBy({ by: ['departmentId'], where: { ...emp, status: 'active' }, _count: { _all: true } }),
       prisma.department.findMany({ select: { id: true, name: true } }),
     ]);
 
   const count = (s: string) => statusCounts.find((c) => c.status === s)?._count._all ?? 0;
   const deptName = new Map(departments.map((d) => [d.id, d.name]));
-  const runTotals = latestRun
-    ? (await prisma.payslip.groupBy({ by: ['currency'], where: { runId: latestRun.id }, _sum: { netSalary: true }, _count: { _all: true } }))
-        .map((t) => ({ currency: t.currency, employees: t._count._all, net: t._sum.netSalary }))
-    : [];
+
+  // latest payroll run of each entity
+  const latestRuns = [];
+  for (const entity of entities) {
+    const run = runs.find((r) => r.entity === entity);
+    if (!run) continue;
+    const totals = (await prisma.payslip.groupBy({ by: ['currency'], where: { runId: run.id }, _sum: { netSalary: true }, _count: { _all: true } }))
+      .map((t) => ({ currency: t.currency, employees: t._count._all, net: t._sum.netSalary }));
+    latestRuns.push({ id: run.id, entity, period: run.period, status: run.status, totals });
+  }
   const announcements = (await forMe(user)).slice(0, 5);
 
   return {
+    entities,
     employees: {
       total: count('active') + count('inactive'),
       active: count('active'),
@@ -55,10 +66,7 @@ export async function adminDashboard(user: AuthUser) {
       payItemsToApprove: pendingPayItems,
     },
     expiring: { withinDays: window, contracts: expiringContracts, documents: expiringDocuments },
-    payroll: {
-      currentPeriod: currentPeriod(),
-      latestRun: latestRun ? { id: latestRun.id, period: latestRun.period, status: latestRun.status, totals: runTotals } : null,
-    },
+    payroll: { currentPeriod: currentPeriod(), latestRuns },
     headcountByDepartment: byDept
       .map((d) => ({ departmentId: d.departmentId, department: d.departmentId ? deptName.get(d.departmentId) ?? '-' : 'Unassigned', employees: d._count._all }))
       .sort((a, b) => b.employees - a.employees),
