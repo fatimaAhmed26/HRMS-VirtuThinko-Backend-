@@ -1,4 +1,4 @@
-// Background checks that run every hour: expiry alerts and scheduled announcements 
+// HR alerts go only to users who can see that employee's entity
 import prisma from '../config/prisma';
 import { getSettings } from '../utils/settings';
 import { notifyEmployee, notifyPermission } from '../utils/notify';
@@ -21,7 +21,7 @@ async function deploymentAlerts() {
   last.setUTCDate(last.getUTCDate() + DEPLOYMENT_ALERTS[DEPLOYMENT_ALERTS.length - 1].days);
   const staff = await prisma.employee.findMany({
     where: { status: 'active', employmentType: 'Outsourced', deploymentEnd: { gte: today, lte: last } },
-    select: { id: true, firstName: true, lastName: true, poNumber: true, deploymentEnd: true, clientCompany: { select: { name: true } } },
+    select: { id: true, firstName: true, lastName: true, country: true, poNumber: true, deploymentEnd: true, clientCompany: { select: { name: true } } },
   });
   for (const e of staff) {
     const daysLeft = Math.round((e.deploymentEnd!.getTime() - today.getTime()) / 86_400_000);
@@ -33,7 +33,7 @@ async function deploymentAlerts() {
       body: `${e.clientCompany?.name ?? 'Client'}${e.poNumber ? ` - PO ${e.poNumber}` : ''} ends ${when} (${daysLeft} days left)`,
       link: `/employees/${e.id}`,
       dedupeKey: `deployment:${e.id}:${when}:${point.days}`, // each alert point is sent once
-    });
+    }, e.country);
   }
 }
 
@@ -45,7 +45,7 @@ export async function runChecks() {
   // documents expiring soon (CPR, passport, visa...)
   const docs = await prisma.document.findMany({
     where: { deletedAt: null, expiryDate: { not: null, lte: until } },
-    include: { employee: { select: { firstName: true, lastName: true, status: true } } },
+    include: { employee: { select: { firstName: true, lastName: true, status: true, country: true } } },
   });
   for (const d of docs) {
     if (d.employee.status !== 'active') continue;
@@ -54,7 +54,7 @@ export async function runChecks() {
     await notifyPermission('document:view', {
       type: 'expiry', title: `Document expiring: ${d.title}`, body: `${name} - expires ${when}`,
       link: `/documents?expiringWithinDays=${window}`, dedupeKey: `expiry:document:${d.id}:${when}`,
-    });
+    }, d.employee.country);
     if (d.visibleToEmployee) {
       await notifyEmployee(d.employeeId, {
         type: 'expiry', title: `Your document "${d.title}" expires on ${when}`, body: 'Please upload a renewed copy.',
@@ -66,14 +66,14 @@ export async function runChecks() {
   // contracts ending soon
   const contracts = await prisma.contract.findMany({
     where: { status: 'active', endDate: { not: null, lte: until } },
-    include: { employee: { select: { firstName: true, lastName: true } } },
+    include: { employee: { select: { firstName: true, lastName: true, country: true } } },
   });
   for (const c of contracts) {
     const when = day(c.endDate!);
     await notifyPermission('contract:manage', {
       type: 'expiry', title: `Contract ending: ${c.employee.firstName} ${c.employee.lastName}`,
       body: `${c.contractNumber ?? `CT-${c.id}`} ends ${when}`, link: `/contracts/${c.id}`, dedupeKey: `expiry:contract:${c.id}:${when}`,
-    });
+    }, c.employee.country);
   }
 
   // outsourced deployments ending (90 / 60 / 30 / 7 days)
