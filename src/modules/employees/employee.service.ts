@@ -229,3 +229,16 @@ export async function history(id: number) {
     createdAt: l.createdAt,
   }));
 }
+// Colleague directory for every signed-in user: work contact details only (no phone, CPR or address)
+export async function directory(search?: string) {
+  const s = search?.trim();
+  return prisma.employee.findMany({
+    where: {
+      status: 'active',
+      ...(s ? { OR: [{ firstName: { contains: s } }, { lastName: { contains: s } }, { jobTitle: { contains: s } }, { department: { name: { contains: s } } }] } : {}),
+    },
+    select: { id: true, firstName: true, lastName: true, jobTitle: true, email: true, photoUrl: true, department: { select: { name: true } } },
+    orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+    take: 200,
+  });
+}

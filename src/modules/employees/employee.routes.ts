@@ -10,6 +10,7 @@ router.param('id', scopeParam(async (id) => id));
 
 router.get('/', requirePermission('employee:view'), c.list);
 router.get('/me', c.me); // must be before '/:id'
+router.get('/directory', c.directory); // every signed-in user: work contact details only
 router.patch('/me', c.updateMe);
 router.get('/:id', requirePermission('employee:view'), c.getById);
 router.get('/:id/history', requirePermission('employee:view'), c.history);

@@ -65,3 +65,7 @@ export const updateMe = asyncHandler(async (req, res) => {
   const input = parse(updateMeSchema, req.body);
   res.json(await service.update(employeeId, input, { userId: req.user!.id, ip: req.ip ?? null, canSeeBank: true }));
 });
+export const directory = asyncHandler(async (req, res) => {
+  const search = typeof req.query.search === 'string' ? req.query.search.slice(0, 100) : undefined;
+  res.json(await service.directory(search));
+});
