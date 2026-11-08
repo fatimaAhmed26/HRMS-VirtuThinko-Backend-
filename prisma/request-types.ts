@@ -50,5 +50,9 @@ The company has no objection to the employee's request regarding: {{purpose}}.
 This certificate has been issued at the employee's request, without any financial or legal liability on the part of the company.`,
   },
   { code: 'DOCUMENT_REQUEST', name: 'Document request', category: 'general', description: 'Request a copy of a document held by HR', template: null },
+  { code: 'REIMBURSEMENT', name: 'Reimbursement claim', category: 'general', description: 'Taxi, travel, purchases - attach the receipt', template: null },
+  { code: 'SALARY_ADVANCE', name: 'Salary advance / loan', category: 'general', description: 'Repaid from salary', template: null },
+  { code: 'BANK_CHANGE', name: 'Bank account change', category: 'general', description: 'New IBAN for salary - attach the bank IBAN letter', template: null },
+  { code: 'DETAILS_CHANGE', name: 'Personal details change', category: 'general', description: 'Name, marital status, ID - HR approves', template: null },
   { code: 'OTHER', name: 'Other request', category: 'general', description: 'Any other HR request', template: null },
 ];
