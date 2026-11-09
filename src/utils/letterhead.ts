@@ -16,16 +16,15 @@ export const FONT_BOLD = 'Body-Bold';
 
 export const LETTER_LEFT = 72;     // text margins of the Word letter
 export const LETTER_RIGHT = 523;
-export const CONTENT_TOP = 72;     // first text line under the header
-export const FOOTER_SPACE = 92;    // keep text above the footer strip
+const FOOTER_SPACE = 92;    // keep text above the footer strip
 
-export function registerFonts(doc: Doc) {
+function registerFonts(doc: Doc) {
   doc.registerFont(FONT, path.join(ASSETS, 'fonts', 'Carlito-Regular.ttf'));
   doc.registerFont(FONT_BOLD, path.join(ASSETS, 'fonts', 'Carlito-Bold.ttf'));
 }
 
 // Draw the header and footer on the current page (does not move the text cursor)
-export function drawLetterheadArt(doc: Doc) {
+function drawLetterheadArt(doc: Doc) {
   const { x, y } = doc;
   const w = doc.page.width;
   const h = doc.page.height;
