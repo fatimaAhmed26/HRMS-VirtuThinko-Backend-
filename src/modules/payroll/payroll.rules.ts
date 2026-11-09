@@ -37,7 +37,7 @@ export function prorationFactor(hireDate: Date | null, period: string) {
 // ───── social insurance ─────
 export interface Contribution { code: string; name: string; rate: number }
 
-export const CONTRIBUTION_CAP: Record<string, number> = {
+const CONTRIBUTION_CAP: Record<string, number> = {
   BH: 4000,   // BHD per month
   SA: 45000,  // SAR per month
 };

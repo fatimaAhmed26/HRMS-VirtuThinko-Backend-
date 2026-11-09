@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
-export const periodSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Use YYYY-MM, e.g. 2026-11');
+const periodSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Use YYYY-MM, e.g. 2026-11');
 const money = z.coerce.number().positive().max(1_000_000).multipleOf(0.001, 'At most 3 decimals');
 
-export const ENTITIES = ['BH', 'SA'] as const; // VirtuThinko Bahrain / VirtuThinko Saudi separate payroll runs
+const ENTITIES = ['BH', 'SA'] as const; // VirtuThinko Bahrain / VirtuThinko Saudi separate payroll runs
 
 export const createRunSchema = z.object({
   period: periodSchema,
