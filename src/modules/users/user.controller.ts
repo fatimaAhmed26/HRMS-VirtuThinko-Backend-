@@ -1,5 +1,7 @@
 import { Request } from 'express';
 import * as service from './user.service';
+import { sessionFor } from '../auth/auth.service';
+import { REFRESH_COOKIE, cookieOptions } from '../auth/auth.controller';
 import {
   changePasswordSchema,
   createUserSchema,
@@ -56,5 +58,9 @@ export const resetPassword = asyncHandler(async (req, res) => {
 
 export const changeOwnPassword = asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = parse(changePasswordSchema, req.body);
-  res.json(await service.changeOwnPassword(req.user!.id, currentPassword, newPassword, req.ip ?? null));
+  const result = await service.changeOwnPassword(req.user!.id, currentPassword, newPassword, req.ip ?? null);
+  // other devices are signed out; this one gets a fresh session so the user stays signed in
+  const { accessToken, refreshToken } = await sessionFor(req.user!.id);
+  res.cookie(REFRESH_COOKIE, refreshToken, cookieOptions);
+  res.json({ ...result, accessToken });
 });
