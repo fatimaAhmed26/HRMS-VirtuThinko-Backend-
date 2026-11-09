@@ -37,6 +37,29 @@ async function deploymentAlerts() {
   }
 }
 
+// Leave planner: remind the employee 20 days before reserved dates to submit the real request
+const RESERVATION_REMINDER_DAYS = 20;
+
+async function reservationReminders() {
+  const today = todayUtc();
+  const until = new Date(today);
+  until.setUTCDate(until.getUTCDate() + RESERVATION_REMINDER_DAYS);
+  const due = await prisma.leaveReservation.findMany({
+    where: { remindedAt: null, startDate: { gte: today, lte: until } },
+    include: { leaveType: { select: { name: true } } },
+  });
+  for (const r of due) {
+    await notifyEmployee(r.employeeId, {
+      type: 'leave',
+      title: `Submit your ${r.leaveType.name.toLowerCase()} request`,
+      body: `You reserved ${day(r.startDate)} to ${day(r.endDate)}. Submit the leave request so your manager can approve it.`,
+      link: '/leave/request',
+      dedupeKey: `reservation:${r.id}`,
+    });
+    await prisma.leaveReservation.update({ where: { id: r.id }, data: { remindedAt: new Date() } });
+  }
+}
+
 export async function runChecks() {
   const window = Number((await getSettings()).expiryAlertDays) || 30;
   const until = new Date();
@@ -78,6 +101,9 @@ export async function runChecks() {
 
   // outsourced deployments ending (90 / 60 / 30 / 7 days)
   await deploymentAlerts();
+
+  // leave planner reminders (20 days before reserved dates)
+  await reservationReminders();
 
   // announcements whose publish time has arrived
   const due = await prisma.announcement.findMany({ where: { notified: false, publishAt: { lte: new Date() } } });
