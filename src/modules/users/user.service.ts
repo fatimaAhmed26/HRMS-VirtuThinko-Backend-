@@ -3,6 +3,7 @@ import prisma from '../../config/prisma';
 import { HttpError } from '../../utils/httpError';
 import { diff, logAudit } from '../../utils/audit';
 import { generateTempPassword, hashPassword, verifyPassword } from '../../utils/password';
+import { revokeSessions } from '../auth/auth.service';
 import type { CreateUserInput, ListUsersQuery, UpdateUserInput } from './user.schema';
 
 export interface Actor {
@@ -166,6 +167,7 @@ export async function setRoles(id: number, roleIds: number[], actor: Actor) {
   const user = await prisma.$transaction(async (tx) => {
     await tx.userRole.deleteMany({ where: { userId: id } });
     await tx.userRole.createMany({ data: roles.map((r) => ({ userId: id, roleId: r.id })) });
+    await revokeSessions(id, tx); // they sign in again and get the new permissions
     await logAudit(
       {
         actorUserId: actor.userId,
@@ -193,6 +195,7 @@ export async function setStatus(id: number, status: 'active' | 'inactive', actor
 
   const user = await prisma.$transaction(async (tx) => {
     const u = await tx.user.update({ where: { id }, data: { status }, select: userSelect });
+    if (status === 'inactive') await revokeSessions(id, tx); // signed out everywhere
     await logAudit(
       {
         actorUserId: actor.userId,
@@ -216,6 +219,7 @@ export async function resetPassword(id: number, password: string | undefined, ac
 
   await prisma.$transaction(async (tx) => {
     await tx.user.update({ where: { id }, data: { passwordHash } });
+    await revokeSessions(id, tx); // old sessions end; they sign in with the new password
     // the password itself is never written to the audit log
     await logAudit({ actorUserId: actor.userId, action: 'user.password_reset', entity: 'User', entityId: id, ip: actor.ip }, tx);
   });
@@ -234,6 +238,7 @@ export async function changeOwnPassword(userId: number, currentPassword: string,
 
   await prisma.$transaction(async (tx) => {
     await tx.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(newPassword) } });
+    await revokeSessions(userId, tx); // signs out other devices; the controller gives this device a new session
     await logAudit({ actorUserId: userId, action: 'user.password_change', entity: 'User', entityId: userId, ip }, tx);
   });
   return { message: 'Password changed' };
