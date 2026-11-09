@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').transform((s) => new Date(`${s}T00:00:00.000Z`));
 
-export const STATUSES = ['pending', 'in_progress', 'approved', 'rejected', 'completed', 'cancelled'] as const;
+const STATUSES = ['pending', 'in_progress', 'approved', 'rejected', 'completed', 'cancelled'] as const;
 
 export const createRequestSchema = z.object({
   typeId: z.number().int().positive(),

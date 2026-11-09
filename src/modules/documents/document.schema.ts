@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const CATEGORIES = ['leave_attachment', 'request_attachment', 'id_copy', 'certificate', 'contract', 'personal', 'other'] as const;
+const CATEGORIES = ['leave_attachment', 'request_attachment', 'id_copy', 'certificate', 'contract', 'personal', 'other'] as const;
 
 // Categories an employee may upload for themselves; the rest are HR-only
 export const SELF_CATEGORIES: readonly string[] = ['leave_attachment', 'request_attachment', 'personal'];

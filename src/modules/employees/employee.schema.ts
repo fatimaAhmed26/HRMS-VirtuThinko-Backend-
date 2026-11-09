@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 // Interns have no portal login; Outsourced staff work at a client company
-export const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Fixed-term', 'Contractor', 'Intern', 'Outsourced', 'Other'] as const;
+const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Fixed-term', 'Contractor', 'Intern', 'Outsourced', 'Other'] as const;
 
 const text = (max: number) => z.string().trim().max(max).optional().nullable();
 const date = z.coerce.date().optional().nullable(); // accepts "2026-01-15"
