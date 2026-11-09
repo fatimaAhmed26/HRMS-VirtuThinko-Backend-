@@ -145,6 +145,7 @@ model Employee {
   directReports      Employee[]   @relation("EmployeeManager")
   user               User?
   leaveRequests      LeaveRequest[]
+  leaveReservations  LeaveReservation[]
   documents          Document[]
   contracts          Contract[]
   payItems           PayItem[]
@@ -194,7 +195,8 @@ model LeaveType {
   noticeDays         Int?    @map("notice_days")                  // longer requests need this many days' notice
   active             Boolean @default(true)
 
-  requests LeaveRequest[]
+  requests     LeaveRequest[]
+  reservations LeaveReservation[]
 
   @@unique([country, code])
   @@map("leave_types")
@@ -222,6 +224,26 @@ model LeaveRequest {
   @@index([employeeId, status])
   @@index([status])
   @@map("leave_requests")
+}
+
+// Leave planner: dates reserved ahead of time (Annual or Hajj). Not a leave request -
+// the employee is reminded 20 days before the start to submit the real request.
+model LeaveReservation {
+  id          Int       @id @default(autoincrement()) @map("leave_reservation_id")
+  employeeId  Int       @map("employee_id")
+  leaveTypeId Int       @map("leave_type_id")
+  startDate   DateTime  @map("start_date") @db.Date
+  endDate     DateTime  @map("end_date") @db.Date
+  note        String?   @db.VarChar(255)
+  remindedAt  DateTime? @map("reminded_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  employee  Employee  @relation(fields: [employeeId], references: [id])
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id])
+
+  @@index([startDate, endDate])
+  @@index([employeeId])
+  @@map("leave_reservations")
 }
 
 model LeaveApproval {
