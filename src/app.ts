@@ -19,14 +19,15 @@ import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import reportRoutes from './modules/reports/report.routes';
 import auditRoutes from './modules/audit/audit.routes';
 import settingsRoutes from './modules/settings/settings.routes';
+import clientRoutes from './modules/clients/client.routes';
 import { HttpError } from './utils/httpError';
-  import clientRoutes from './modules/clients/client.routes';
+import { CLIENT_URL } from './config/env';
 
 const app = express();
 
 app.use(helmet());
-app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
-app.use(express.json());
+app.use(cors({ origin: CLIENT_URL, credentials: true })); // browsers may only call the API from the React app
+app.use(express.json({ limit: '100kb' }));               // reject oversized JSON bodies
 app.use(cookieParser());
 
 app.get('/api/health', (_req: Request, res: Response) => {
@@ -61,6 +62,11 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   // malformed JSON body -> 400 instead of 500
   if (err instanceof SyntaxError && 'body' in err) {
     res.status(400).json({ message: 'Request body is not valid JSON' });
+    return;
+  }
+  // body too large (over 100 kb) -> 413 instead of 500
+  if (typeof err === 'object' && err && (err as { type?: string }).type === 'entity.too.large') {
+    res.status(413).json({ message: 'Request body is too large' });
     return;
   }
   if (err instanceof HttpError) {
