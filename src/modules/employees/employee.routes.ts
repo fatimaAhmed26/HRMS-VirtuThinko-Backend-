@@ -14,6 +14,7 @@ router.get('/directory', c.directory); // every signed-in user: work contact det
 router.patch('/me', c.updateMe);
 router.get('/:id', requirePermission('employee:view'), c.getById);
 router.get('/:id/history', requirePermission('employee:view'), c.history);
+router.get('/:id/acceptance-letter', requirePermission('employee:view'), c.acceptanceLetter);
 router.post('/', requirePermission('employee:create'), c.create);
 router.patch('/:id', requirePermission('employee:edit'), c.update);
 router.patch('/:id/status', requirePermission('employee:deactivate'), c.setStatus);
