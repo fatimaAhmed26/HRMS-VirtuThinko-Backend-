@@ -18,6 +18,7 @@ model User {
   status       String    @default("active") @db.VarChar(20)
   entityScope  String    @default("ALL") @map("entity_scope") @db.VarChar(3)
   lastLoginAt  DateTime? @map("last_login_at")
+  tokenVersion Int       @default(0) @map("token_version") // raised on logout / password change / deactivation -> old refresh tokens stop working
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
