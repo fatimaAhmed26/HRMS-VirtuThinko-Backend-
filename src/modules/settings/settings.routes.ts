@@ -23,6 +23,8 @@ const updateSchema = z.object({
   expiryAlertDays: z.coerce.number().int().min(1).max(180).transform(String).optional(),
   hrSignatoryName: z.string().trim().max(100).optional(),
   hrSignatoryTitle: z.string().trim().max(100).optional(),
+  ceoName: z.string().trim().max(100).optional(),
+  ceoTitle: z.string().trim().max(100).optional(),
 });
 
 const router = Router();
@@ -41,7 +43,7 @@ router.get('/logo', asyncHandler(async (_req, res) => {
 
 router.use(authenticate);
 
-router.get('/', asyncHandler(async (_req, res) => res.json(await getSettings())));
+router.get('/', requirePermission('settings:manage'), asyncHandler(async (_req, res) => res.json(await getSettings())));
 
 router.patch('/', requirePermission('settings:manage'), asyncHandler(async (req, res) => {
   const input = parse(updateSchema, req.body);
