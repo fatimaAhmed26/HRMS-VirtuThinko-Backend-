@@ -16,7 +16,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
   }
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET as string) as AccessPayload;
+    const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET as string, { algorithms: ['HS256'] }) as AccessPayload;
     req.user = {
       id: Number(payload.sub),
       employeeId: payload.employeeId,
