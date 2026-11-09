@@ -8,8 +8,8 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-const REFRESH_COOKIE = 'refreshToken';
-const cookieOptions: CookieOptions = {
+export const REFRESH_COOKIE = 'refreshToken';
+export const cookieOptions: CookieOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'strict',
@@ -47,9 +47,14 @@ export const refresh: RequestHandler = async (req, res, next) => {
   }
 };
 
-export const logout: RequestHandler = (_req, res) => {
-  res.clearCookie(REFRESH_COOKIE, { path: '/api/auth' });
-  res.json({ message: 'Logged out' });
+export const logout: RequestHandler = async (req, res, next) => {
+  try {
+    await authService.logout(req.cookies?.[REFRESH_COOKIE]); // the old refresh token can't be reused
+    res.clearCookie(REFRESH_COOKIE, { path: '/api/auth' });
+    res.json({ message: 'Logged out' });
+  } catch (err) {
+    next(err);
+  }
 };
 
 export const me: RequestHandler = async (req, res, next) => {
