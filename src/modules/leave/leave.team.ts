@@ -40,7 +40,7 @@ async function visibleCountries(user: AuthUser) {
 const person = { select: { id: true, firstName: true, lastName: true, country: true, department: { select: { name: true } } } };
 const fullName = (e: { firstName: string; lastName: string }) => `${e.firstName} ${e.lastName}`;
 
-export async function calendar(user: AuthUser, from: Date, to: Date) {
+async function calendar(user: AuthUser, from: Date, to: Date) {
   const countries = await visibleCountries(user);
   const isHr = user.permissions.includes('leave:manage');
   const overlap = { startDate: { lte: to }, endDate: { gte: from }, employee: { country: { in: countries }, status: 'active' } };
@@ -80,7 +80,7 @@ function requireEmployee(user: AuthUser) {
   return user.employeeId;
 }
 
-export async function myReservations(user: AuthUser) {
+async function myReservations(user: AuthUser) {
   return prisma.leaveReservation.findMany({
     where: { employeeId: requireEmployee(user), endDate: { gte: todayUtc() } },
     include: { leaveType: { select: { id: true, code: true, name: true } } },
@@ -88,7 +88,7 @@ export async function myReservations(user: AuthUser) {
   });
 }
 
-export async function reserve(user: AuthUser, input: z.infer<typeof reservationSchema>, ip: string | null) {
+async function reserve(user: AuthUser, input: z.infer<typeof reservationSchema>, ip: string | null) {
   const employeeId = requireEmployee(user);
   const emp = await prisma.employee.findUnique({ where: { id: employeeId }, select: { country: true, status: true } });
   if (!emp || emp.status !== 'active') throw new HttpError(400, 'Employee record is not active');
@@ -118,7 +118,7 @@ export async function reserve(user: AuthUser, input: z.infer<typeof reservationS
   });
 }
 
-export async function cancelReservation(user: AuthUser, id: number, ip: string | null) {
+async function cancelReservation(user: AuthUser, id: number, ip: string | null) {
   const r = await prisma.leaveReservation.findUnique({ where: { id } });
   if (!r) throw new HttpError(404, 'Reservation not found');
   if (r.employeeId !== user.employeeId && !user.permissions.includes('leave:manage')) {

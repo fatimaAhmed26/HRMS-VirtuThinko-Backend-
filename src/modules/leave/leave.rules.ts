@@ -11,7 +11,7 @@ export interface LeaveRules {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-export const WEEKEND = [5, 6]; // Friday, Saturday (Bahrain & Saudi)
+const WEEKEND = [5, 6]; // Friday, Saturday (Bahrain & Saudi)
 
 export function toDateKey(d: Date) {
   return d.toISOString().slice(0, 10); // "2026-11-01"
