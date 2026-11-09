@@ -7,6 +7,7 @@ import { saveFile } from '../../utils/fileStorage';
 import { notifyEmployee, notifyPermission } from '../../utils/notify';
 import { getCompany, getSettings } from '../../utils/settings';
 import type { AuthUser } from '../../types/express';
+import { letterDate } from '../../utils/letterhead';
 import { renderLetterPdf } from './letter.pdf';
 import type { CreateRequestInput, ListRequestsQuery, UpdateTypeInput } from './request.schema';
 
@@ -173,7 +174,7 @@ export async function generateLetter(id: number, user: AuthUser, ip: Ip) {
   };
 
   const pdf = await renderLetterPdf({
-    company, title: type.name, reference: reference(id), date: today, addressedTo: values.addressedTo,
+    company, title: type.name, reference: reference(id), date: letterDate(new Date()), addressedTo: values.addressedTo,
     body: fill(type.template, values), signatoryName: settings.hrSignatoryName, signatoryTitle: settings.hrSignatoryTitle,
   });
   const storedName = await saveFile(pdf, '.pdf');
