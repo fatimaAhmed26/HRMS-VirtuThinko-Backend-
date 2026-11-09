@@ -4,3 +4,11 @@ uploads/
 
 /src/generated/prisma
 dist/
+
+# test output
+*.json.tmp
+token.txt
+login.json
+req*.json
+emp*.json
+hist.json
