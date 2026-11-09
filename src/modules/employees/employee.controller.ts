@@ -1,5 +1,7 @@
 import { Request } from 'express';
+import { z } from 'zod';
 import * as service from './employee.service';
+import { acceptanceLetter as buildAcceptanceLetter } from './acceptance-letter.service';
 import { createEmployeeSchema, listQuerySchema, statusSchema, updateEmployeeSchema, updateMeSchema } from './employee.schema';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { parse } from '../../utils/validate';
@@ -68,4 +70,17 @@ export const updateMe = asyncHandler(async (req, res) => {
 export const directory = asyncHandler(async (req, res) => {
   const search = typeof req.query.search === 'string' ? req.query.search.slice(0, 100) : undefined;
   res.json(await service.directory(search));
+});
+
+// Internship acceptance letter (PDF, no signature - signed by hand after printing)
+const letterQuery = z.object({
+  date: z.coerce.date().optional(),
+  weeks: z.coerce.number().int().min(1).max(104).optional(),
+});
+
+export const acceptanceLetter = asyncHandler(async (req, res) => {
+  const { pdf, fileName } = await buildAcceptanceLetter(idParam(req), parse(letterQuery, req.query), actorFrom(req));
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  res.send(pdf);
 });
