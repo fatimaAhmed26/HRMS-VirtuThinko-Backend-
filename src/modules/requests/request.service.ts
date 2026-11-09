@@ -22,6 +22,7 @@ const requestInclude = {
 
 const reference = (id: number) => `REQ-${String(id).padStart(5, '0')}`;
 const canProcess = (u: AuthUser) => u.permissions.includes('request:process');
+// "Salary certificate" -> "salary certificate request", but "Document request" stays "document request"
 const label = (name: string) => (/request$/i.test(name) ? name.toLowerCase() : `${name.toLowerCase()} request`);
 
 // types 
@@ -62,7 +63,7 @@ export async function create(input: CreateRequestInput, user: AuthUser, ip: Ip) 
   });
 
   await notifyPermission('request:process', {
-      type: 'request', title: `New ${type.name.toLowerCase()} request`,
+      type: 'request', title: `New ${label(type.name)}`,
       body: `${r.employee.firstName} ${r.employee.lastName} - ${input.purpose}`, link: `/requests/${r.id}`,
     }, r.employee.country);
   return { ...r, reference: reference(r.id) };
@@ -119,7 +120,7 @@ async function setStatus(id: number, from: string[], to: string, user: AuthUser,
 
 export async function start(id: number, user: AuthUser, ip: Ip) {
   const r = await setStatus(id, ['pending'], 'in_progress', user, ip);
-  await notifyEmployee(r.employeeId, { type: 'request', title: `Your ${r.type.name.toLowerCase()} request is being processed`, link: `/my/requests/${id}` });
+  await notifyEmployee(r.employeeId, { type: 'request', title: `Your ${label(r.type.name)} is being processed`, link: `/my/requests/${id}` });
   return r;
 }
 
@@ -219,7 +220,7 @@ export async function complete(id: number, documentId: number | undefined, comme
     extra.resultDocumentId = documentId;
   }
   const finalDocId = (extra.resultDocumentId as number | undefined) ?? r.resultDocumentId;
-  const updated = await setStatus(id, r.type.category === 'letter' ? ['approved'] : OPEN, 'completed', user, ip, extra, comment);
+  await setStatus(id, r.type.category === 'letter' ? ['approved'] : OPEN, 'completed', user, ip, extra, comment);
   if (finalDocId) await prisma.document.update({ where: { id: finalDocId }, data: { visibleToEmployee: true } });
 
   await notifyEmployee(r.employeeId, {
@@ -231,7 +232,7 @@ export async function complete(id: number, documentId: number | undefined, comme
 
 export async function reject(id: number, comment: string, user: AuthUser, ip: Ip) {
   const r = await setStatus(id, OPEN, 'rejected', user, ip, { decisionComment: comment }, comment);
-  await notifyEmployee(r.employeeId, { type: 'request', title: `Your ${r.type.name.toLowerCase()} request was rejected`, body: comment, link: `/my/requests/${id}` });
+  await notifyEmployee(r.employeeId, { type: 'request', title: `Your ${label(r.type.name)} was rejected`, body: comment, link: `/my/requests/${id}` });
   return r;
 }
 
