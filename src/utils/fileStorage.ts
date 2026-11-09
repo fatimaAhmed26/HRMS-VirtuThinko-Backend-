@@ -6,7 +6,7 @@ import { HttpError } from './httpError';
 export const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 
 // Files live outside the public web root; they are only served through the authenticated download route
-export const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || 'uploads');
+const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || 'uploads');
 
 // Detect the real file type from its first bytes ("magic numbers"),
 // so a .exe renamed to .pdf is rejected even if the browser says it's a PDF

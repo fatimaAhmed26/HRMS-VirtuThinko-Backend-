@@ -3,7 +3,7 @@ import prisma from '../config/prisma';
 import { filePath } from './fileStorage';
 
 // Editable company settings (requirements section 25). Values fall back to .env, then to defaults.
-export const SETTING_DEFAULTS: Record<string, string> = {
+const SETTING_DEFAULTS: Record<string, string> = {
   companyName: process.env.COMPANY_NAME || 'Company',
   companyAddress: process.env.COMPANY_ADDRESS || '',
   companyPhone: '',
@@ -15,6 +15,8 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   expiryAlertDays: '30',      // alert HR this many days before a document/contract expires
   hrSignatoryName: 'Human Resources Department',
   hrSignatoryTitle: '',
+  ceoName: 'Mahmood Aladraj',   // signs internship acceptance letters
+  ceoTitle: 'CEO',
 };
 
 export async function getSettings(): Promise<Record<string, string>> {

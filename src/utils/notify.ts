@@ -37,7 +37,7 @@ export async function notifyEmployee(employeeId: number, n: NotificationInput) {
   await notifyUsers(await userIdsForEmployees([employeeId]), n);
 }
 
-export async function userIdsWithPermission(permission: string, country?: string) {
+async function userIdsWithPermission(permission: string, country?: string) {
   const users = await prisma.user.findMany({
     where: {
       status: 'active',
