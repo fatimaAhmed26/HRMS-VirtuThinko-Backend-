@@ -213,6 +213,8 @@ export async function createRequest(input: CreateRequestInput, user: AuthUser, i
       },
       include: requestInclude,
     });
+    // the real request replaces any planner reservation for the same dates
+    await tx.leaveReservation.deleteMany({ where: { employeeId, startDate: { lte: input.endDate }, endDate: { gte: input.startDate } } });
     await logAudit(
       { actorUserId: user.id, action: 'leave.request', entity: 'LeaveRequest', entityId: r.id,
         changes: { type: type.code, startDate: toDateKey(input.startDate), endDate: toDateKey(input.endDate), days }, ip },
