@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import * as c from './user.controller';
 import { authenticate, requirePermission } from '../../middleware/auth';
+import { passwordLimiter } from '../../middleware/rateLimit';
 
 const router = Router();
 
 router.use(authenticate);
 
 // any logged-in user: change own password (must be before '/:id')
-router.patch('/me/password', c.changeOwnPassword);
+router.patch('/me/password', passwordLimiter, c.changeOwnPassword);
 
 // user administration (BR: restricted to authorized administrators)
 router.get('/', requirePermission('user:view'), c.list);
