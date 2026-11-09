@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
-import { BRAND, INK, MUTED, RULE, drawLetterhead, pdfToBuffer } from '../../utils/pdf';
+import { BRAND, INK, MUTED, RULE, pdfToBuffer } from '../../utils/pdf';
+import { FONT, FONT_BOLD, contentBottom, useLetterhead } from '../../utils/letterhead';
 import type { CompanyInfo } from '../../utils/settings';
 import type { ReportResult } from './report.definitions';
 
@@ -29,38 +30,43 @@ export async function toExcel(r: ReportResult, company: CompanyInfo) {
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
+// PDF export on the company letterhead (landscape). The header and footer repeat on every page.
 export function toPdf(r: ReportResult, company: CompanyInfo) {
   return pdfToBuffer((doc) => {
-    const left = doc.page.margins.left;
-    const width = doc.page.width - left - doc.page.margins.right;
-    const bottom = doc.page.height - doc.page.margins.bottom - 20;
+    useLetterhead(doc);
+    const left = 40;
+    const width = doc.page.width - left * 2;
+    const bottom = contentBottom(doc) - 4;
     const totalWidth = r.columns.reduce((s, c) => s + (c.width ?? (c.numeric ? 12 : 16)), 0);
     const widths = r.columns.map((c) => ((c.width ?? (c.numeric ? 12 : 16)) / totalWidth) * width);
 
-    let y = drawLetterhead(doc, company, r.title, r.subtitle);
+    doc.font(FONT_BOLD).fontSize(13).fillColor('#000000').text(r.title, left, 50, { width, align: 'center' });
+    if (r.subtitle) doc.font(FONT).fontSize(10).fillColor(MUTED).text(r.subtitle, left, doc.y + 1, { width, align: 'center' });
+    let y = doc.y + 12;
+
     const header = () => {
       doc.rect(left, y, width, 18).fill(BRAND);
       let x = left;
-      doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#FFFFFF');
+      doc.font(FONT_BOLD).fontSize(9).fillColor('#FFFFFF');
       r.columns.forEach((c, i) => {
-        doc.text(c.label, x + 4, y + 5, { width: widths[i] - 8, align: c.numeric ? 'right' : 'left', lineBreak: false, ellipsis: true });
+        doc.text(c.label, x + 4, y + 4.5, { width: widths[i] - 8, align: c.numeric ? 'right' : 'left', lineBreak: false, ellipsis: true });
         x += widths[i];
       });
       y += 22;
     };
     header();
 
-    if (r.rows.length === 0) doc.font('Helvetica').fontSize(10).fillColor(MUTED).text('No records match these filters.', left, y + 6);
+    if (r.rows.length === 0) doc.font(FONT).fontSize(10).fillColor(MUTED).text('No records match these filters.', left, y + 6);
     r.rows.forEach((row, idx) => {
       if (y > bottom) {
-        doc.addPage();
-        y = doc.page.margins.top;
+        doc.addPage(); // the letterhead is drawn automatically on the new page
+        y = 50;
         header();
       }
       const total = String(row[r.columns[0].key] ?? '').toUpperCase().startsWith('TOTAL');
-      if (idx % 2 === 1 && !total) doc.rect(left, y - 3, width, 16).fill('#F6F7F9');
+      if (idx % 2 === 1 && !total) doc.rect(left, y - 3, width, 16).fill('#F4F4F4');
       let x = left;
-      doc.font(total ? 'Helvetica-Bold' : 'Helvetica').fontSize(8.5).fillColor(INK);
+      doc.font(total ? FONT_BOLD : FONT).fontSize(9).fillColor(INK);
       r.columns.forEach((c, i) => {
         const v = row[c.key];
         const text = v === null || v === undefined ? '' : typeof v === 'number' ? v.toLocaleString('en-US', { maximumFractionDigits: 3 }) : String(v);
@@ -71,16 +77,14 @@ export function toPdf(r: ReportResult, company: CompanyInfo) {
       if (total) doc.moveTo(left, y - 2).lineTo(left + width, y - 2).strokeColor(RULE).stroke();
     });
 
+    // page numbers in the empty space left of the red header band
     const range = doc.bufferedPageRange();
     for (let i = range.start; i < range.start + range.count; i++) {
       doc.switchToPage(i);
-      const bottomMargin = doc.page.margins.bottom;
-      doc.page.margins.bottom = 0; 
-      doc.font('Helvetica').fontSize(7.5).fillColor(MUTED).text(
-        `${company.name} - ${r.title} - generated ${new Date().toISOString().slice(0, 10)} - page ${i + 1} of ${range.count}`,
-        left, doc.page.height - bottomMargin + 10, { width, align: 'center', lineBreak: false }
+      doc.font(FONT).fontSize(8).fillColor(MUTED).text(
+        `${company.name} · ${r.title} · generated ${new Date().toISOString().slice(0, 10)} · page ${i + 1} of ${range.count}`,
+        left, 14, { width: doc.page.width - 480, lineBreak: false, ellipsis: true },
       );
-      doc.page.margins.bottom = bottomMargin;
     }
-  }, { layout: 'landscape', margin: 40, bufferPages: true });
+  }, { layout: 'landscape', margin: 0, bufferPages: true });
 }
