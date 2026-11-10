@@ -409,6 +409,7 @@ model Document {
   mimeType          String    @map("mime_type") @db.VarChar(50)
   size              Int                                            // bytes
   expiryDate        DateTime? @map("expiry_date") @db.Date         // e.g. passport / CPR copy
+  remindDaysBefore  Int?      @map("remind_days_before")           // e.g. 90 / 30 / 7; empty = company default (Settings)
   visibleToEmployee Boolean   @default(true) @map("visible_to_employee")
   notes             String?   @db.VarChar(500)
   uploadedByUserId  Int       @map("uploaded_by_user_id")
