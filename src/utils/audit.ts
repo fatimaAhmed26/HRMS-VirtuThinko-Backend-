@@ -27,10 +27,14 @@ export function logAudit(entry: AuditEntry, db: Db = prisma) {
   });
 }
 
-const REDACTED_FIELDS = new Set(['bankAccountNumber', 'passwordHash']);
+const REDACTED_FIELDS = new Set([
+  'bankAccountNumber', 'passwordHash',
+  'hasMedicalCondition', 'medicalDetails', 'bloodGroup', 'regularMedication', // confidential medical data
+]);
 
 function normalize(value: unknown): Scalar {
   if (value instanceof Date) return value.toISOString();
+  if (value !== null && typeof value === 'object') return JSON.stringify(value); // e.g. the documents checklist
   return (value ?? null) as Scalar;
 }
 
