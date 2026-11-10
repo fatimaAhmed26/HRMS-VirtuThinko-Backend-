@@ -14,6 +14,7 @@ function actorFrom(req: Request): service.Actor {
     userId: req.user!.id,
     ip: req.ip ?? null,
     canSeeBank: perms.includes('payroll:view') || perms.includes('employee:edit'),
+    canSeeMedical: perms.includes('employee:edit'), // confidential section of the onboarding form
   };
 }
 
@@ -32,11 +33,12 @@ export const list = asyncHandler(async (req, res) => {
 export const me = asyncHandler(async (req, res) => {
   const employeeId = req.user!.employeeId;
   if (!employeeId) throw new HttpError(404, 'No employee record is linked to this account');
-  res.json(await service.getById(employeeId, true));
+  res.json(await service.getById(employeeId, true, true)); // your own record, medical included
 });
 
 export const getById = asyncHandler(async (req, res) => {
-  res.json(await service.getById(idParam(req), actorFrom(req).canSeeBank));
+  const actor = actorFrom(req);
+  res.json(await service.getById(idParam(req), actor.canSeeBank, actor.canSeeMedical));
 });
 
 export const create = asyncHandler(async (req, res) => {
@@ -65,7 +67,7 @@ export const updateMe = asyncHandler(async (req, res) => {
   const employeeId = req.user!.employeeId;
   if (!employeeId) throw new HttpError(404, 'No employee record is linked to this account');
   const input = parse(updateMeSchema, req.body);
-  res.json(await service.update(employeeId, input, { userId: req.user!.id, ip: req.ip ?? null, canSeeBank: true }));
+  res.json(await service.update(employeeId, input, { userId: req.user!.id, ip: req.ip ?? null, canSeeBank: true, canSeeMedical: true }));
 });
 export const directory = asyncHandler(async (req, res) => {
   const search = typeof req.query.search === 'string' ? req.query.search.slice(0, 100) : undefined;
