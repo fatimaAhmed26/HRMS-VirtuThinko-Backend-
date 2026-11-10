@@ -24,3 +24,18 @@ export function uploadSingle(req: Request, res: Response, next: NextFunction) {
     next();
   });
 }
+
+// Completed onboarding forms (Word / PDF / photo) can be larger: up to 20 MB, read in memory and never stored
+const FORM_MAX = 20 * 1024 * 1024;
+const multerForm = multer({ storage: multer.memoryStorage(), limits: { fileSize: FORM_MAX, files: 1 } }).single('file');
+
+export function uploadForm(req: Request, res: Response, next: NextFunction) {
+  multerForm(req, res, (err: unknown) => {
+    if (err instanceof multer.MulterError) {
+      return next(new HttpError(400, err.code === 'LIMIT_FILE_SIZE' ? 'File is too large (maximum 20 MB)' : 'Send exactly one file in the "file" field'));
+    }
+    if (err) return next(err);
+    if (!req.file) return next(new HttpError(400, 'No file uploaded (use the "file" field)'));
+    next();
+  });
+}
