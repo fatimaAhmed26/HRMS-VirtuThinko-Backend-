@@ -8,7 +8,8 @@ import type { CreateEmployeeInput, ListEmployeesQuery, UpdateEmployeeInput } fro
 export interface Actor {
   userId: number;
   ip: string | null;
-  canSeeBank: boolean; // full bank account number, or masked
+  canSeeBank: boolean;    // full bank account number, or masked
+  canSeeMedical: boolean; // confidential medical section (HR with employee:edit, or the employee themselves)
 }
 
 const listSelect = {
@@ -34,17 +35,58 @@ const detailInclude = {
   clientCompany: { select: { id: true, name: true, annualLeaveDays: true } },
   manager: { select: { id: true, employeeCode: true, firstName: true, lastName: true } },
   user: { select: { id: true, username: true, status: true } },
+  dependants: { orderBy: { id: 'asc' } },
+  qualifications: { orderBy: [{ kind: 'asc' }, { id: 'asc' }] },
+  previousEmployments: { orderBy: { sortOrder: 'asc' } },
 } satisfies Prisma.EmployeeInclude;
 
 type EmployeeDetail = Prisma.EmployeeGetPayload<{ include: typeof detailInclude }>;
 
-function present(emp: EmployeeDetail, canSeeBank: boolean) {
+function present(emp: EmployeeDetail, canSeeBank: boolean, canSeeMedical: boolean) {
   let bankAccountNumber: string | null = null;
   if (emp.bankAccountNumber) {
     const plain = decrypt(emp.bankAccountNumber);
     bankAccountNumber = canSeeBank ? plain : mask(plain);
   }
-  return { ...emp, bankAccountNumber };
+  const medical = canSeeMedical
+    ? {
+        medicalDetails: emp.medicalDetails ? decrypt(emp.medicalDetails) : null,
+        regularMedication: emp.regularMedication ? decrypt(emp.regularMedication) : null,
+      }
+    : { hasMedicalCondition: null, medicalDetails: null, bloodGroup: null, regularMedication: null };
+  return { ...emp, bankAccountNumber, ...medical };
+}
+
+const ADDRESS_PARTS = ['addressFlat', 'addressBuilding', 'addressRoad', 'addressBlock', 'addressCity', 'addressCountry'] as const;
+
+const encryptOrNull = (v: string | null | undefined) => (v === undefined ? undefined : v ? encrypt(v) : null);
+
+// Join the address parts into the one-line address used everywhere else
+function joinAddress(i: UpdateEmployeeInput) {
+  const parts = [
+    i.addressFlat && `Flat ${i.addressFlat}`,
+    i.addressBuilding && `Bldg ${i.addressBuilding}`,
+    i.addressRoad && `Road ${i.addressRoad}`,
+    i.addressBlock && `Block ${i.addressBlock}`,
+    i.addressCity,
+    i.addressCountry,
+  ].filter(Boolean);
+  return parts.length ? parts.join(', ').slice(0, 255) : undefined;
+}
+
+// Split the form into employee columns and the repeating sections; encrypt what must be encrypted
+function toColumns(input: UpdateEmployeeInput) {
+  const { dependants, qualifications, previousEmployments, documentChecklist, ...rest } = input;
+  const columns = {
+    ...rest,
+    address: rest.address ?? joinAddress(rest),
+    bankAccountNumber: encryptOrNull(rest.bankAccountNumber),
+    medicalDetails: encryptOrNull(rest.medicalDetails),
+    regularMedication: encryptOrNull(rest.regularMedication),
+    documentChecklist: documentChecklist === null ? Prisma.DbNull : documentChecklist,
+  };
+  const ordered = previousEmployments?.map((p, sortOrder) => ({ ...p, sortOrder }));
+  return { columns, dependants, qualifications, previousEmployments: ordered };
 }
 
 async function nextEmployeeCode(tx: Prisma.TransactionClient) {
@@ -105,10 +147,10 @@ export async function list(q: ListEmployeesQuery, scope: Prisma.EmployeeWhereInp
   return { items, page: q.page, pageSize: q.pageSize, total, totalPages: Math.ceil(total / q.pageSize) };
 }
 
-export async function getById(id: number, canSeeBank: boolean) {
+export async function getById(id: number, canSeeBank: boolean, canSeeMedical = false) {
   const emp = await prisma.employee.findUnique({ where: { id }, include: detailInclude });
   if (!emp) throw new HttpError(404, 'Employee not found');
-  return present(emp, canSeeBank);
+  return present(emp, canSeeBank, canSeeMedical);
 }
 
 export async function create(input: CreateEmployeeInput, actor: Actor) {
@@ -117,13 +159,21 @@ export async function create(input: CreateEmployeeInput, actor: Actor) {
   }
   await checkReferences(input);
 
+  const { columns, dependants, qualifications, previousEmployments } = toColumns(input);
   const created = await prisma.$transaction(async (tx) => {
     const employeeCode = input.employeeCode || (await nextEmployeeCode(tx));
     const emp = await tx.employee.create({
       data: {
-        ...input,
+        ...columns,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        email: input.email,
         employeeCode,
-        bankAccountNumber: input.bankAccountNumber ? encrypt(input.bankAccountNumber) : null,
+        verifiedByUserId: actor.userId, // HR who received and verified the form
+        verifiedAt: input.verifiedAt ?? new Date(),
+        dependants: dependants?.length ? { createMany: { data: dependants } } : undefined,
+        qualifications: qualifications?.length ? { createMany: { data: qualifications } } : undefined,
+        previousEmployments: previousEmployments?.length ? { createMany: { data: previousEmployments } } : undefined,
       },
       include: detailInclude,
     });
@@ -141,7 +191,7 @@ export async function create(input: CreateEmployeeInput, actor: Actor) {
     return emp;
   });
 
-  return present(created, actor.canSeeBank);
+  return present(created, actor.canSeeBank, actor.canSeeMedical);
 }
 
 export async function update(id: number, input: UpdateEmployeeInput, actor: Actor) {
@@ -154,29 +204,48 @@ export async function update(id: number, input: UpdateEmployeeInput, actor: Acto
   const type = input.employmentType !== undefined ? input.employmentType : before.employmentType;
   const client = input.clientCompanyId !== undefined ? input.clientCompanyId : before.clientCompanyId;
   if (type === 'Outsourced' && !client) throw new HttpError(400, 'Outsourced staff need a client company');
-  // compare against the decrypted bank number so re-saving the same value isn't a "change"
+  // compare against decrypted values so re-saving the same value isn't a "change"
   const beforePlain = {
     ...before,
     bankAccountNumber: before.bankAccountNumber ? decrypt(before.bankAccountNumber) : null,
+    medicalDetails: before.medicalDetails ? decrypt(before.medicalDetails) : null,
+    regularMedication: before.regularMedication ? decrypt(before.regularMedication) : null,
   };
-  const changes = diff(beforePlain, input);
-  if (Object.keys(changes).length === 0) return getById(id, actor.canSeeBank);
+  const { dependants, qualifications, previousEmployments, ...scalars } = input;
+  const changes: Record<string, unknown> = diff(beforePlain, scalars);
+  // repeating sections are replaced as a whole
+  if (dependants) changes.dependants = `replaced (${dependants.length})`;
+  if (qualifications) changes.qualifications = `replaced (${qualifications.length})`;
+  if (previousEmployments) changes.previousEmployments = `replaced (${previousEmployments.length})`;
+  if (Object.keys(changes).length === 0) return getById(id, actor.canSeeBank, actor.canSeeMedical);
 
-  const data: Prisma.EmployeeUncheckedUpdateInput = { ...input };
-  if (input.bankAccountNumber !== undefined) {
-    data.bankAccountNumber = input.bankAccountNumber ? encrypt(input.bankAccountNumber) : null;
-  }
+  const parts = toColumns(input);
+  // address is only re-joined when the address parts were sent
+  const data: Prisma.EmployeeUncheckedUpdateInput = { ...parts.columns };
+  if (input.address === undefined && !ADDRESS_PARTS.some((k) => input[k] !== undefined)) delete data.address;
 
   const updated = await prisma.$transaction(async (tx) => {
+    if (parts.dependants) {
+      await tx.dependant.deleteMany({ where: { employeeId: id } });
+      await tx.dependant.createMany({ data: parts.dependants.map((d) => ({ ...d, employeeId: id })) });
+    }
+    if (parts.qualifications) {
+      await tx.qualification.deleteMany({ where: { employeeId: id } });
+      await tx.qualification.createMany({ data: parts.qualifications.map((q) => ({ ...q, employeeId: id })) });
+    }
+    if (parts.previousEmployments) {
+      await tx.previousEmployment.deleteMany({ where: { employeeId: id } });
+      await tx.previousEmployment.createMany({ data: parts.previousEmployments.map((p) => ({ ...p, employeeId: id })) });
+    }
     const emp = await tx.employee.update({ where: { id }, data, include: detailInclude });
     await logAudit(
-      { actorUserId: actor.userId, action: 'employee.update', entity: 'Employee', entityId: id, changes, ip: actor.ip },
+      { actorUserId: actor.userId, action: 'employee.update', entity: 'Employee', entityId: id, changes: changes as Prisma.InputJsonValue, ip: actor.ip },
       tx
     );
     return emp;
   });
 
-  return present(updated, actor.canSeeBank);
+  return present(updated, actor.canSeeBank, actor.canSeeMedical);
 }
 
 export async function setStatus(id: number, status: 'active' | 'inactive', reason: string | undefined, actor: Actor) {
@@ -204,7 +273,7 @@ export async function setStatus(id: number, status: 'active' | 'inactive', reaso
     );
   });
 
-  return getById(id, actor.canSeeBank);
+  return getById(id, actor.canSeeBank, actor.canSeeMedical);
 }
 
 export async function history(id: number) {
