@@ -57,3 +57,5 @@ export const loginLimiter = [
 ];
 export const refreshLimiter = rateLimit({ windowMs: FIFTEEN_MIN, max: 120, message: 'Too many requests.', key: (req) => `refresh:${ip(req)}` });
 export const passwordLimiter = rateLimit({ windowMs: FIFTEEN_MIN, max: 10, message: 'Too many password attempts.', key: (req) => `password:${req.user?.id ?? ip(req)}` });
+// Each document scan is a paid AI request: 40 per user per 15 minutes is plenty for HR work
+export const scanLimiter = rateLimit({ windowMs: FIFTEEN_MIN, max: 40, message: 'Too many document scans.', key: (req) => `scan:${req.user?.id ?? ip(req)}` });
