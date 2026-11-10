@@ -27,3 +27,8 @@ export function checkEnv() {
 export const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 // 127.0.0.1 = only this computer can reach the API. Set HOST=0.0.0.0 only when deploying behind a proxy.
 export const HOST = process.env.HOST || '127.0.0.1';
+
+// Document scanner (optional): reads ID cards and passports with Claude's vision API.
+// Without a key the rest of the portal works and the scanner says it is not set up.
+export const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+export const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5';
