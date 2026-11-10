@@ -65,13 +65,18 @@ export async function runChecks() {
   const until = new Date();
   until.setUTCDate(until.getUTCDate() + window);
 
-  // documents expiring soon (CPR, passport, visa...)
+  // documents expiring soon (CPR, passport, visa...); a document can set its own reminder, e.g. 90 days before
+  const latest = new Date();
+  latest.setUTCDate(latest.getUTCDate() + 365);
   const docs = await prisma.document.findMany({
-    where: { deletedAt: null, expiryDate: { not: null, lte: until } },
+    where: { deletedAt: null, expiryDate: { not: null, lte: latest } },
     include: { employee: { select: { firstName: true, lastName: true, status: true, country: true } } },
   });
   for (const d of docs) {
     if (d.employee.status !== 'active') continue;
+    const remindFrom = new Date();
+    remindFrom.setUTCDate(remindFrom.getUTCDate() + (d.remindDaysBefore ?? window));
+    if (d.expiryDate! > remindFrom) continue; // not yet time to remind
     const when = day(d.expiryDate!);
     const name = `${d.employee.firstName} ${d.employee.lastName}`;
     await notifyPermission('document:view', {
