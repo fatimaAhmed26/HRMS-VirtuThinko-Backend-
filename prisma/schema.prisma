@@ -137,6 +137,75 @@ model Employee {
   emergencyName  String?   @map("emergency_contact_name") @db.VarChar(100)
   emergencyPhone String?   @map("emergency_contact_phone") @db.VarChar(20)
 
+  // ── onboarding form VTHR-ONB-F01 ──
+  // names exactly as on official documents
+  fullNamePassport String?   @map("full_name_passport") @db.VarChar(150)
+  fullNameId       String?   @map("full_name_id") @db.VarChar(150)
+  fullNameArabic   String?   @map("full_name_arabic") @db.VarChar(150)
+  placeOfBirth     String?   @map("place_of_birth") @db.VarChar(100)
+  otherNationality String?   @map("other_nationality") @db.VarChar(50)
+  maritalStatus    String?   @map("marital_status") @db.VarChar(15)
+  childrenCount    Int?      @map("children_count")
+
+  // ID and residence documents
+  idExpiry              DateTime? @map("id_expiry") @db.Date
+  passportNumber        String?   @map("passport_number") @db.VarChar(30)
+  passportPlaceOfIssue  String?   @map("passport_place_of_issue") @db.VarChar(100)
+  passportIssueDate     DateTime? @map("passport_issue_date") @db.Date
+  passportExpiry        DateTime? @map("passport_expiry") @db.Date
+  permitNumber          String?   @map("permit_number") @db.VarChar(30)
+  permitExpiry          DateTime? @map("permit_expiry") @db.Date
+  socialInsuranceNumber String?   @map("social_insurance_number") @db.VarChar(30)
+  drivingLicenceNumber  String?   @map("driving_licence_number") @db.VarChar(30)
+
+  // address parts (address above holds the joined line)
+  addressFlat        String? @map("address_flat") @db.VarChar(20)
+  addressBuilding    String? @map("address_building") @db.VarChar(20)
+  addressRoad        String? @map("address_road") @db.VarChar(50)
+  addressBlock       String? @map("address_block") @db.VarChar(20)
+  addressCity        String? @map("address_city") @db.VarChar(100)
+  addressCountry     String? @map("address_country") @db.VarChar(50)
+  homeCountryAddress String? @map("home_country_address") @db.VarChar(255)
+  altPhone           String? @map("alt_phone") @db.VarChar(20)
+  personalEmail      String? @map("personal_email") @db.VarChar(100)
+
+  // emergency contacts (contact 1 uses emergencyName / emergencyPhone)
+  emergencyRelationship  String? @map("emergency_relationship") @db.VarChar(50)
+  emergencyAltPhone      String? @map("emergency_alt_phone") @db.VarChar(20)
+  emergencyAddress       String? @map("emergency_address") @db.VarChar(255)
+  emergency2Name         String? @map("emergency2_name") @db.VarChar(100)
+  emergency2Relationship String? @map("emergency2_relationship") @db.VarChar(50)
+  emergency2Phone        String? @map("emergency2_phone") @db.VarChar(20)
+  emergency2AltPhone     String? @map("emergency2_alt_phone") @db.VarChar(20)
+  emergency2Address      String? @map("emergency2_address") @db.VarChar(255)
+
+  languages             String?  @db.VarChar(255)
+  mayContactEmployers   Boolean? @map("may_contact_employers")
+  hasRestrictiveClauses Boolean? @map("has_restrictive_clauses") // non-compete / confidentiality / notice
+
+  // medical (voluntary, confidential): details and medication are encrypted
+  hasMedicalCondition Boolean? @map("has_medical_condition")
+  medicalDetails      String?  @map("medical_details") @db.Text
+  bloodGroup          String?  @map("blood_group") @db.VarChar(5)
+  regularMedication   String?  @map("regular_medication") @db.Text
+
+  bankBranch        String? @map("bank_branch") @db.VarChar(100)
+  bankAccountHolder String? @map("bank_account_holder") @db.VarChar(150)
+
+  // documents checklist: { passport: { na, received }, ... }
+  documentChecklist Json? @map("document_checklist")
+
+  // declaration and consent
+  declarationAccepted Boolean   @default(false) @map("declaration_accepted")
+  declarationName     String?   @map("declaration_name") @db.VarChar(150)
+  declarationDate     DateTime? @map("declaration_date") @db.Date
+  declarationPlace    String?   @map("declaration_place") @db.VarChar(100)
+
+  // for HR use only
+  verifiedByUserId Int?      @map("verified_by_user_id")
+  verifiedAt       DateTime? @map("verified_at") @db.Date
+  hrRemarks        String?   @map("hr_remarks") @db.VarChar(500)
+
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
@@ -152,8 +221,64 @@ model Employee {
   payItems           PayItem[]
   payslips           Payslip[]
   requests           EmployeeRequest[]
+  dependants          Dependant[]
+  qualifications      Qualification[]
+  previousEmployments PreviousEmployment[]
 
   @@map("employees")
+}
+
+model Dependant {
+  id           Int       @id @default(autoincrement()) @map("dependant_id")
+  employeeId   Int       @map("employee_id")
+  fullName     String    @map("full_name") @db.VarChar(150)
+  relationship String    @db.VarChar(20) // Spouse | Son | Daughter | Parent | Other
+  birthDate    DateTime? @map("birth_date") @db.Date
+  nationality  String?   @db.VarChar(50)
+  idNumber     String?   @map("id_number") @db.VarChar(30) // passport or ID no.
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("dependants")
+}
+
+model Qualification {
+  id           Int       @id @default(autoincrement()) @map("qualification_id")
+  employeeId   Int       @map("employee_id")
+  kind         String    @db.VarChar(15)  // education | certification
+  title        String    @db.VarChar(150) // degree, or certification / licence
+  institution  String?   @db.VarChar(150) // institution, or issuing body
+  country      String?   @db.VarChar(50)
+  year         Int?
+  grade        String?   @db.VarChar(20)
+  obtainedDate DateTime? @map("obtained_date") @db.Date
+  expiryDate   DateTime? @map("expiry_date") @db.Date
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("qualifications")
+}
+
+model PreviousEmployment {
+  id               Int       @id @default(autoincrement()) @map("previous_employment_id")
+  employeeId       Int       @map("employee_id")
+  sortOrder        Int       @default(0) @map("sort_order") // 0 = most recent
+  employerName     String    @map("employer_name") @db.VarChar(150)
+  jobTitle         String?   @map("job_title") @db.VarChar(100)
+  fromDate         DateTime? @map("from_date") @db.Date
+  toDate           DateTime? @map("to_date") @db.Date
+  reasonForLeaving String?   @map("reason_for_leaving") @db.VarChar(255)
+  refName          String?   @map("ref_name") @db.VarChar(100)
+  refJobTitle      String?   @map("ref_job_title") @db.VarChar(100)
+  refPhone         String?   @map("ref_phone") @db.VarChar(20)
+  refEmail         String?   @map("ref_email") @db.VarChar(100)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("previous_employments")
 }
 
 // ─────────── Audit ───────────
