@@ -185,6 +185,16 @@ export async function bankFile(id: number, user: AuthUser, ip: Ip) {
 // ───────────── payslips ─────────────
 
 // HR and payroll only  the route requires payroll:view
+// Payslip history for the employee profile (HR / payroll only)
+export async function employeePayslips(employeeId: number) {
+  return prisma.payslip.findMany({
+    where: { employeeId },
+    select: { id: true, currency: true, grossSalary: true, netSalary: true, run: { select: { period: true, status: true } } },
+    orderBy: { run: { period: 'desc' } },
+    take: 36,
+  });
+}
+
 export async function getPayslip(id: number) {
   const slip = await prisma.payslip.findUnique({ where: { id }, include: { run: { select: { period: true, status: true } } } });
   if (!slip) throw new HttpError(404, 'Payslip not found');
