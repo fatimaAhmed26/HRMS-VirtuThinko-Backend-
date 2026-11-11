@@ -9,7 +9,7 @@ import { getCompany, getSettings } from '../../utils/settings';
 import type { AuthUser } from '../../types/express';
 import { letterDate } from '../../utils/letterhead';
 import { renderLetterPdf } from './letter.pdf';
-import type { CreateRequestInput, ListRequestsQuery, UpdateTypeInput } from './request.schema';
+import type { CreateRequestInput, IssueLetterInput, ListRequestsQuery, UpdateTypeInput } from './request.schema';
 
 type Ip = string | null;
 const OPEN = ['pending', 'in_progress', 'approved'];
@@ -199,6 +199,32 @@ export async function generateLetter(id: number, user: AuthUser, ip: Ip) {
     return u;
   });
   return { ...updated, reference: reference(id) };
+}
+
+// HR issues a letter from the employee profile: the request is created, the letter generated and
+// the request closed in one step. The PDF stays HR-only (employees never see salary figures).
+export async function issueLetter(input: IssueLetterInput, user: AuthUser, ip: Ip) {
+  const type = await prisma.requestType.findFirst({ where: { id: input.typeId, active: true } });
+  if (!type || type.category !== 'letter' || !type.template) throw new HttpError(400, 'Choose a letter type that has a template');
+  const emp = await prisma.employee.findUnique({ where: { id: input.employeeId }, select: { id: true } });
+  if (!emp) throw new HttpError(404, 'Employee not found');
+
+  const created = await prisma.$transaction(async (tx) => {
+    const r = await tx.employeeRequest.create({
+      data: { employeeId: emp.id, typeId: type.id, purpose: input.purpose, addressedTo: input.addressedTo, status: 'in_progress', handledByUserId: user.id },
+    });
+    await logAudit({ actorUserId: user.id, action: 'request.issue', entity: 'EmployeeRequest', entityId: r.id, changes: { type: type.code, purpose: input.purpose }, ip }, tx);
+    return r;
+  });
+
+  const generated = await generateLetter(created.id, user, ip);
+  await prisma.$transaction(async (tx) => {
+    await tx.employeeRequest.update({ where: { id: created.id }, data: { status: 'completed', completedAt: new Date() } });
+    // shows in the employee profile's History tab
+    await logAudit({ actorUserId: user.id, action: 'letter.issued', entity: 'Employee', entityId: emp.id,
+      changes: { letter: type.name, reference: reference(created.id) }, ip }, tx);
+  });
+  return { ...generated, status: 'completed', reference: reference(created.id) };
 }
 
 // HR has reviewed the letter (or the request) and approves it
