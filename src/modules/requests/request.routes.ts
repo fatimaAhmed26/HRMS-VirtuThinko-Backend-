@@ -1,12 +1,12 @@
 import { Request, Router } from 'express';
 import * as service from './request.service';
-import { commentSchema, completeSchema, createRequestSchema, listQuerySchema, rejectSchema, updateTypeSchema } from './request.schema';
+import { commentSchema, completeSchema, createRequestSchema, issueLetterSchema, listQuerySchema, rejectSchema, updateTypeSchema } from './request.schema';
 import { authenticate, requirePermission } from '../../middleware/auth';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { parse } from '../../utils/validate';
 import { HttpError } from '../../utils/httpError';
 import prisma from '../../config/prisma';
-import { employeeScope, scopeParam } from '../../utils/scope';
+import { assertEmployee, employeeScope, scopeParam } from '../../utils/scope';
 
 function idParam(req: Request): number {
   const id = Number(req.params.id);
@@ -37,6 +37,11 @@ router.post('/:id/cancel', asyncHandler(async (req, res) => res.json(await servi
 // HR
 router.get('/', requirePermission('request:view', 'request:process'), asyncHandler(async (req, res) => {
     res.json(await service.list(parse(listQuerySchema, req.query), await employeeScope(req.user!)));}));
+router.post('/issue', requirePermission('request:process'), asyncHandler(async (req, res) => {
+  const input = parse(issueLetterSchema, req.body);
+  await assertEmployee(req.user!, input.employeeId);
+  res.status(201).json(await service.issueLetter(input, req.user!, ip(req)));
+}));
 router.get('/:id', asyncHandler(async (req, res) => res.json(await service.get(idParam(req), req.user!))));
 router.post('/:id/start', requirePermission('request:process'), asyncHandler(async (req, res) => {
   res.json(await service.start(idParam(req), req.user!, ip(req)));
