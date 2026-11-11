@@ -12,6 +12,15 @@ export const createRequestSchema = z.object({
   attachmentId: z.number().int().positive().optional(), // uploaded via /api/documents (category request_attachment)
 });
 
+// HR issues a letter straight from the employee profile
+export const issueLetterSchema = z.object({
+  employeeId: z.number().int().positive(),
+  typeId: z.number().int().positive(),
+  purpose: z.string().trim().min(2, 'Give the purpose of the letter').max(255),
+  addressedTo: z.string().trim().max(150).optional(),
+});
+export type IssueLetterInput = z.infer<typeof issueLetterSchema>;
+
 export const commentSchema = z.object({ comment: z.string().trim().max(500).optional() });
 export const rejectSchema = z.object({
   comment: z.string({ error: 'A reason is required when rejecting' }).trim().min(1, 'A reason is required when rejecting').max(500),
