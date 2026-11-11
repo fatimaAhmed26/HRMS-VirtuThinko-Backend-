@@ -1,5 +1,8 @@
 import { Router } from 'express';
 import * as c from './payroll.controller';
+import * as service from './payroll.service';
+import { asyncHandler } from '../../utils/asyncHandler';
+import { HttpError } from '../../utils/httpError';
 import { authenticate, requirePermission } from '../../middleware/auth';
 import prisma from '../../config/prisma';
 import { assertCountry, assertEmployee } from '../../utils/scope';
@@ -26,6 +29,12 @@ router.use(authenticate);
   });
 
 // payslips - HR and payroll only (employees do not see payroll in this system)
+router.get('/payslips', requirePermission('payroll:view'), asyncHandler(async (req, res) => {
+  const employeeId = Number(req.query.employeeId);
+  if (!Number.isInteger(employeeId) || employeeId <= 0) throw new HttpError(400, 'employeeId is required');
+  await assertEmployee(req.user!, employeeId);
+  res.json(await service.employeePayslips(employeeId));
+}));
 router.get('/payslips/:id', requirePermission('payroll:view'), c.getPayslip);
 router.get('/payslips/:id/pdf', requirePermission('payroll:view'), c.payslipPdf);
 // payroll runs
