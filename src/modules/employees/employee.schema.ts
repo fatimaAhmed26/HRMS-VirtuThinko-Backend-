@@ -147,6 +147,18 @@ export const createEmployeeSchema = z.object({
   verifiedAt: date, // verifiedByUserId is always the HR user saving the form
   hrRemarks: text(500),
 
+  // interns
+  university: text(150),
+  studentId: text(30),
+  major: text(100),
+  skills: text(255),
+  academicTutor: text(100),
+  projectTitle: text(200),
+  projectSummary: text(1000),
+  internshipStart: date,
+  internshipEnd: date,
+  letterSignedAt: date,
+
   // repeating sections: sent in full, replace what was saved before
   dependants: z.array(dependantSchema).max(20).optional(),
   qualifications: z.array(qualificationSchema).max(30).optional(),
