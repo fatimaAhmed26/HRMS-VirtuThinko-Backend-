@@ -201,6 +201,18 @@ model Employee {
   declarationDate     DateTime? @map("declaration_date") @db.Date
   declarationPlace    String?   @map("declaration_place") @db.VarChar(100)
 
+  // interns
+  university       String?   @db.VarChar(150)
+  studentId        String?   @map("student_id") @db.VarChar(30)
+  major            String?   @db.VarChar(100)
+  skills           String?   @db.VarChar(255)
+  academicTutor    String?   @map("academic_tutor") @db.VarChar(100)
+  projectTitle     String?   @map("project_title") @db.VarChar(200)
+  projectSummary   String?   @map("project_summary") @db.Text
+  internshipStart  DateTime? @map("internship_start") @db.Date
+  internshipEnd    DateTime? @map("internship_end") @db.Date
+  letterSignedAt   DateTime? @map("letter_signed_at") @db.Date
+
   // for HR use only
   verifiedByUserId Int?      @map("verified_by_user_id")
   verifiedAt       DateTime? @map("verified_at") @db.Date
