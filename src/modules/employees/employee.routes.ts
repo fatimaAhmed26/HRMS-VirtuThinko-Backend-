@@ -12,9 +12,11 @@ router.get('/', requirePermission('employee:view'), c.list);
 router.get('/me', c.me); // must be before '/:id'
 router.get('/directory', c.directory); // every signed-in user: work contact details only
 router.patch('/me', c.updateMe);
+router.get('/interns', requirePermission('employee:view'), c.interns);
 router.get('/:id', requirePermission('employee:view'), c.getById);
 router.get('/:id/history', requirePermission('employee:view'), c.history);
 router.get('/:id/acceptance-letter', requirePermission('employee:view'), c.acceptanceLetter);
+router.get('/:id/proposal-form', requirePermission('employee:view'), c.proposalForm);
 router.post('/', requirePermission('employee:create'), c.create);
 router.patch('/:id', requirePermission('employee:edit'), c.update);
 router.patch('/:id/status', requirePermission('employee:deactivate'), c.setStatus);
