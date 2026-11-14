@@ -1,7 +1,7 @@
 import { Request } from 'express';
 import { z } from 'zod';
 import * as service from './employee.service';
-import { acceptanceLetter as buildAcceptanceLetter } from './acceptance-letter.service';
+import { acceptanceLetter as buildAcceptanceLetter, proposalForm as buildProposalForm } from './acceptance-letter.service';
 import { createEmployeeSchema, listQuerySchema, statusSchema, updateEmployeeSchema, updateMeSchema } from './employee.schema';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { parse } from '../../utils/validate';
@@ -25,6 +25,10 @@ function idParam(req: Request): number {
 }
 
 // only employees of the user's entities (BH / SA)
+export const interns = asyncHandler(async (req, res) => {
+  res.json(await service.interns(await employeeScope(req.user!)));
+});
+
 export const list = asyncHandler(async (req, res) => {
   res.json(await service.list(parse(listQuerySchema, req.query), await employeeScope(req.user!)));
 });
@@ -82,6 +86,13 @@ const letterQuery = z.object({
 
 export const acceptanceLetter = asyncHandler(async (req, res) => {
   const { pdf, fileName } = await buildAcceptanceLetter(idParam(req), parse(letterQuery, req.query), actorFrom(req));
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  res.send(pdf);
+});
+
+export const proposalForm = asyncHandler(async (req, res) => {
+  const { pdf, fileName } = await buildProposalForm(idParam(req), actorFrom(req));
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
   res.send(pdf);
