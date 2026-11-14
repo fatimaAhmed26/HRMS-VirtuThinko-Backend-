@@ -147,6 +147,32 @@ export async function list(q: ListEmployeesQuery, scope: Prisma.EmployeeWhereInp
   return { items, page: q.page, pageSize: q.pageSize, total, totalPages: Math.ceil(total / q.pageSize) };
 }
 
+const DAY_MS = 86_400_000;
+
+export async function interns(scope: Prisma.EmployeeWhereInput) {
+  const rows = await prisma.employee.findMany({
+    where: { AND: [scope, { employmentType: 'Intern' }] },
+    select: {
+      id: true, employeeCode: true, firstName: true, lastName: true, status: true,
+      university: true, major: true, internshipStart: true, internshipEnd: true,
+      letterSignedAt: true, documentChecklist: true,
+      department: { select: { id: true, name: true } },
+      manager: { select: { id: true, firstName: true, lastName: true } },
+      contracts: { where: { contractType: 'internship' }, orderBy: { startDate: 'desc' }, take: 1, select: { startDate: true, endDate: true } },
+    },
+    orderBy: [{ internshipStart: 'desc' }, { id: 'desc' }],
+    take: 300,
+  });
+  const today = Date.now();
+  return rows.map(({ contracts, internshipStart, internshipEnd, ...r }) => {
+    const start = internshipStart ?? contracts[0]?.startDate ?? null;
+    const end = internshipEnd ?? contracts[0]?.endDate ?? null;
+    let phase: 'starting' | 'active' | 'completed' | 'unscheduled' = 'unscheduled';
+    if (start && end) phase = today < start.getTime() ? 'starting' : today > end.getTime() + DAY_MS ? 'completed' : 'active';
+    return { ...r, internshipStart: start, internshipEnd: end, phase };
+  });
+}
+
 export async function getById(id: number, canSeeBank: boolean, canSeeMedical = false) {
   const emp = await prisma.employee.findUnique({ where: { id }, include: detailInclude });
   if (!emp) throw new HttpError(404, 'Employee not found');
