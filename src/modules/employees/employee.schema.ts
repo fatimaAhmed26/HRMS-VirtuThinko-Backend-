@@ -8,6 +8,7 @@ const date = z.coerce.date().optional().nullable(); // accepts "2026-01-15"
 const id = z.number().int().positive().optional().nullable();
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
+const INTERN_TYPES = ['clp', 'student', 'graduate', 'training'] as const;
 
 const dependantSchema = z.object({
   fullName: z.string().trim().min(1, 'Dependant name is required').max(150),
@@ -148,6 +149,7 @@ export const createEmployeeSchema = z.object({
   hrRemarks: text(500),
 
   // interns
+  internType: z.enum(INTERN_TYPES).nullable().optional(),
   university: text(150),
   studentId: text(30),
   major: text(100),
