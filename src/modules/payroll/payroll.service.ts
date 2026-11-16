@@ -5,7 +5,7 @@ import { logAudit } from '../../utils/audit';
 import { decrypt } from '../../utils/crypto';
 import type { AuthUser } from '../../types/express';
 import { calculatePayslip } from './payroll.calc';
-import { periodRange } from './payroll.rules';
+import { CURRENCY, D, periodRange, round } from './payroll.rules';
 import type { CreateItemInput, CreateItemTypeInput, ListItemsQuery, ListRunsQuery } from './payroll.schema';
 
 type Ip = string | null;
@@ -284,4 +284,32 @@ export async function deleteItem(id: number, user: AuthUser, ip: Ip) {
     await tx.payItem.delete({ where: { id } });
     await logAudit({ actorUserId: user.id, action: 'pay_item.delete', entity: 'PayItem', entityId: id, ip }, tx);
   });
+}
+
+// interns: monthly stipend outside the salary run; part months are paid days / 30; no social insurance
+export async function internStipends(period: string, entity: string) {
+  const { start, end } = periodRange(period);
+  const decimals = CURRENCY[entity]?.decimals ?? 2;
+  const interns = await prisma.employee.findMany({
+    where: { employmentType: 'Intern', country: entity, status: 'active' },
+    select: { id: true, employeeCode: true, firstName: true, lastName: true, university: true, stipend: true, internshipStart: true, internshipEnd: true },
+    orderBy: { id: 'asc' },
+  });
+  const rows = [];
+  let total = D(0);
+  for (const i of interns) {
+    const stipend = i.stipend;
+    if (!stipend || !i.internshipStart || !i.internshipEnd) continue;
+    const from = i.internshipStart > start ? i.internshipStart : start;
+    const to = i.internshipEnd < end ? i.internshipEnd : end;
+    if (to < from) continue;
+    const paidDays = Math.min(30, Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1);
+    const amount = round(D(stipend).mul(paidDays).div(30), entity);
+    total = total.add(amount);
+    rows.push({
+      employeeId: i.id, employeeCode: i.employeeCode, name: `${i.firstName} ${i.lastName}`, university: i.university,
+      monthlyStipend: stipend.toFixed(decimals), paidDays, amount: amount.toFixed(decimals),
+    });
+  }
+  return { period, entity, currency: CURRENCY[entity]?.code ?? 'BHD', rows, total: total.toFixed(decimals) };
 }
