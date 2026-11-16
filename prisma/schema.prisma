@@ -204,6 +204,7 @@ model Employee {
   // interns
   university       String?   @db.VarChar(150)
   internType       String?   @map("intern_type") @db.VarChar(20)
+  isClp            Boolean   @default(false) @map("is_clp")
   studentId        String?   @map("student_id") @db.VarChar(30)
   major            String?   @db.VarChar(100)
   skills           String?   @db.VarChar(255)
