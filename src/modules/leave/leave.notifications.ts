@@ -30,7 +30,7 @@ export async function onLeaveDecided(r: LeaveSummary) {
     const last = await prisma.leaveApproval.findFirst({ where: { requestId: r.id }, orderBy: { createdAt: 'desc' } });
     await notifyEmployee(r.employee.id, {
       type: 'leave', title: `Your leave request was ${r.status}`,
-      body: [label(r), last?.comment].filter(Boolean).join(' - '), link: `/my/leave/${r.id}`,
+      body: [label(r), last?.comment].filter(Boolean).join(' - '), link: `/leave/requests/${r.id}`,
     });
   } else {
     await notifyApprovers(r); // moved from manager to HR
