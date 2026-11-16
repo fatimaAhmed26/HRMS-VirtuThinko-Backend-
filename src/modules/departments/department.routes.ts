@@ -10,12 +10,13 @@ import { diff, logAudit } from '../../utils/audit';
 const departmentSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(100),
   managerId: z.number().int().positive().optional().nullable(),
+  location: z.string().trim().max(100).optional().nullable(),
 });
 
 const router = Router();
 router.use(authenticate);
 
-// GET /api/departments -> list with manager and employee count
+// GET /api/departments -> list with manager and active headcount
 router.get(
   '/',
   requirePermission('department:view', 'employee:view'),
@@ -24,7 +25,7 @@ router.get(
       orderBy: { name: 'asc' },
       include: {
         manager: { select: { id: true, firstName: true, lastName: true } },
-        _count: { select: { employees: true } },
+        _count: { select: { employees: { where: { status: 'active' } } } },
       },
     });
     res.json(departments);
