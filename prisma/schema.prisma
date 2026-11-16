@@ -212,6 +212,7 @@ model Employee {
   projectSummary   String?   @map("project_summary") @db.Text
   internshipStart  DateTime? @map("internship_start") @db.Date
   internshipEnd    DateTime? @map("internship_end") @db.Date
+  stipend          Decimal?  @db.Decimal(12, 3)
   letterSignedAt   DateTime? @map("letter_signed_at") @db.Date
 
   // for HR use only
