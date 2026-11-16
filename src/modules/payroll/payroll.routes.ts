@@ -28,6 +28,8 @@ router.use(authenticate);
     check().then(() => next(), next);
   });
 
+// intern stipends for one month (?period=2026-11&entity=BH)
+router.get('/stipends', requirePermission('payroll:view'), c.stipends);
 // payslips - HR and payroll only (employees do not see payroll in this system)
 router.get('/payslips', requirePermission('payroll:view'), asyncHandler(async (req, res) => {
   const employeeId = Number(req.query.employeeId);
