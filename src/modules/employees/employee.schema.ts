@@ -159,6 +159,7 @@ export const createEmployeeSchema = z.object({
   projectSummary: text(1000),
   internshipStart: date,
   internshipEnd: date,
+  stipend: z.number().nonnegative().max(1000000).nullable().optional(),
   letterSignedAt: date,
 
   // repeating sections: sent in full, replace what was saved before
