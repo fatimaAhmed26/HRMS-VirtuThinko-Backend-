@@ -108,3 +108,12 @@ export const deleteItem = asyncHandler(async (req, res) => {
   await service.deleteItem(idParam(req), req.user!, ip(req));
   res.status(204).end();
 });
+
+export const stipends = asyncHandler(async (req, res) => {
+  const period = String(req.query.period ?? '');
+  const entity = String(req.query.entity ?? '');
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) throw new HttpError(400, 'period must be YYYY-MM');
+  if (entity !== 'BH' && entity !== 'SA') throw new HttpError(400, 'entity must be BH or SA');
+  await assertCountry(req.user!, entity);
+  res.json(await service.internStipends(period, entity));
+});
