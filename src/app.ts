@@ -6,6 +6,7 @@ import { Prisma } from '@prisma/client';
 import authRoutes from './modules/auth/auth.routes';
 import employeeRoutes from './modules/employees/employee.routes';
 import departmentRoutes from './modules/departments/department.routes';
+import jobTitleRoutes from './modules/departments/job-title.routes';
 import userRoutes from './modules/users/user.routes';
 import roleRoutes from './modules/roles/role.routes';
 import leaveRoutes from './modules/leave/leave.routes';
@@ -38,6 +39,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/departments', departmentRoutes);
+app.use('/api/job-titles', jobTitleRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/leave', leaveRoutes);

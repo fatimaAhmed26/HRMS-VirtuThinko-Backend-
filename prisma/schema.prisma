@@ -95,8 +95,25 @@ model Department {
 
   manager   Employee?  @relation("DepartmentManager", fields: [managerId], references: [id])
   employees Employee[] @relation("DepartmentEmployees")
+  jobTitles JobTitle[]
 
   @@map("departments")
+}
+
+model JobTitle {
+  id           Int      @id @default(autoincrement()) @map("job_title_id")
+  departmentId Int      @map("department_id")
+  name         String   @db.VarChar(100)
+  grade        String?  @db.VarChar(20)
+  country      String   @db.VarChar(2) // BH | SA
+  minSalary    Decimal? @map("min_salary") @db.Decimal(12, 3)
+  maxSalary    Decimal? @map("max_salary") @db.Decimal(12, 3)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  department   Department @relation(fields: [departmentId], references: [id])
+
+  @@unique([departmentId, name, country])
+  @@map("job_titles")
 }
 
 model Employee {
