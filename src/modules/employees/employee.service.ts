@@ -154,7 +154,7 @@ export async function interns(scope: Prisma.EmployeeWhereInput) {
     where: { AND: [scope, { employmentType: 'Intern' }] },
     select: {
       id: true, employeeCode: true, firstName: true, lastName: true, status: true,
-      university: true, internType: true, major: true, internshipStart: true, internshipEnd: true,
+      university: true, internType: true, isClp: true, major: true, internshipStart: true, internshipEnd: true,
       letterSignedAt: true, documentChecklist: true,
       department: { select: { id: true, name: true } },
       manager: { select: { id: true, firstName: true, lastName: true } },
