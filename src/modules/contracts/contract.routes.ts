@@ -45,4 +45,17 @@ router.post('/:id/terminate', requirePermission('contract:manage'), asyncHandler
   res.json(await service.terminate(idParam(req), reason, req.user!, req.ip ?? null));
 }));
 
+// English PDF of the contract (generated on request, nothing is stored)
+router.get('/:id/pdf', requirePermission('contract:view'), asyncHandler(async (req, res) => {
+  const { buffer, fileName } = await service.pdf(idParam(req));
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(buffer);
+}));
+
+router.post('/:id/send-for-signature', requirePermission('contract:manage'), asyncHandler(async (req, res) => {
+  res.status(201).json(await service.sendForSignature(idParam(req), req.user!, req.ip ?? null));
+}));
+
 export default router;

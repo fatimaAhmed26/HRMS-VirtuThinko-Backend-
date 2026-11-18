@@ -2,12 +2,15 @@ import prisma from '../../config/prisma';
 import { HttpError } from '../../utils/httpError';
 import { logAudit } from '../../utils/audit';
 import { assertEmployee } from '../../utils/scope';
-import { detectFileType, saveFile } from '../../utils/fileStorage';
+import { cleanFileName, detectFileType, saveFile } from '../../utils/fileStorage';
 import type { AuthUser } from '../../types/express';
 import type { SignInput } from './signature.schema';
+import { createHash, randomBytes } from 'crypto';
+import type { Prisma } from '@prisma/client';
 
 // The JSON body limit is 100 kB, so a signature image above this size can't arrive anyway
 const MAX_SIGNATURE_BYTES = 64 * 1024;
+const EXPIRY_MS = 14 * 24 * 60 * 60 * 1000;
 
 const listSelect = {
   id: true, employeeId: true, kind: true, title: true, status: true, token: true,
@@ -34,6 +37,28 @@ export async function cancel(id: number, user: AuthUser, ip: string | null) {
     if (result.count === 0) throw new HttpError(409, 'This request was just signed or cancelled');
     await logAudit({ actorUserId: user.id, action: 'signature.cancel', entity: 'Employee', entityId: current.employeeId, changes: { request: id }, ip }, tx);
     return { ...(await tx.signatureRequest.findUniqueOrThrow({ where: { id }, select: listSelect })), token: null };
+  });
+}
+
+// A PDF that HR sends for signature (used by the contracts module). The employee signs the PDF through the link.
+export async function createDocumentRequest(
+  tx: Prisma.TransactionClient,
+  input: { employeeId: number; kind: string; title: string; pdf: Buffer; fileName: string; createdByUserId: number },
+) {
+  const documentStoredName = await saveFile(input.pdf, '.pdf');
+  return tx.signatureRequest.create({
+    data: {
+      employeeId: input.employeeId,
+      kind: input.kind,
+      title: input.title.slice(0, 150),
+      token: randomBytes(32).toString('hex'),
+      documentStoredName,
+      documentName: cleanFileName(input.fileName),
+      documentSha256: createHash('sha256').update(input.pdf).digest('hex'),
+      expiresAt: new Date(Date.now() + EXPIRY_MS),
+      createdByUserId: input.createdByUserId,
+    },
+    select: listSelect,
   });
 }
 

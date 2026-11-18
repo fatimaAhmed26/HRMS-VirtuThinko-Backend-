@@ -480,12 +480,16 @@ model Contract {
   status             String    @default("active") @db.VarChar(20)      // active | renewed | expired | terminated
   documentId         Int?      @map("document_id")                     // signed contract PDF
   notes              String?   @db.VarChar(500)
+  title              String?   @db.VarChar(150)                       // English title, e.g. "Unlimited Employment Contract"
+  terms              Json?                                            // employing entity, probation, notice, leave, salary items
+  signatureRequestId Int?      @unique @map("signature_request_id")   // the request sent to the employee to sign
   createdByUserId    Int       @map("created_by_user_id")
   createdAt          DateTime  @default(now()) @map("created_at")
 
-  employee Employee  @relation(fields: [employeeId], references: [id])
-  document Document? @relation(fields: [documentId], references: [id])
-  payslips Payslip[]
+  employee         Employee          @relation(fields: [employeeId], references: [id])
+  document         Document?         @relation(fields: [documentId], references: [id])
+  signatureRequest SignatureRequest? @relation(fields: [signatureRequestId], references: [id])
+  payslips         Payslip[]
 
   @@index([employeeId, status])
   @@index([endDate])
@@ -551,6 +555,8 @@ model SignatureRequest {
   signatureStoredName String?   @map("signature_stored_name") @db.VarChar(100)
 
   employee Employee @relation(fields: [employeeId], references: [id])
+
+  contract Contract?
 
   @@index([employeeId, status])
   @@map("signature_requests")

@@ -2,17 +2,26 @@ import { Prisma } from '@prisma/client';
 import prisma from '../../config/prisma';
 import { HttpError } from '../../utils/httpError';
 import { logAudit } from '../../utils/audit';
-import { getSettings } from '../../utils/settings';
+import { getCompany, getSettings } from '../../utils/settings';
 import type { AuthUser } from '../../types/express';
 import { CURRENCY } from '../payroll/payroll.rules';
-import type { CreateContractInput, ListContractsQuery } from './contract.schema';
+import { createDocumentRequest } from '../signatures/signature.service';
+import { contractPdf } from './contract.pdf';
+import type { ContractTerms, CreateContractInput, ListContractsQuery } from './contract.schema';
 
 const contractInclude = {
   employee: { select: { id: true, employeeCode: true, firstName: true, lastName: true, country: true } },
   document: { select: { id: true, originalName: true } },
+  signatureRequest: { select: { id: true, status: true, token: true, expiresAt: true, signedAt: true, signerName: true } },
 } satisfies Prisma.ContractInclude;
 
 type ContractRow = Prisma.ContractGetPayload<{ include: typeof contractInclude }>;
+
+const DEFAULT_TITLE: Record<string, string> = {
+  unlimited: 'Unlimited Employment Contract',
+  limited: 'Limited Employment Contract',
+  internship: 'Internship Contract',
+};
 
 async function alertDays() {
   return Number((await getSettings()).expiryAlertDays) || 30;
@@ -35,7 +44,9 @@ function present(c: ContractRow, windowDays: number) {
     else if (daysLeft <= windowDays) displayStatus = 'expiring_soon';
   }
   const state = c.status === 'renewed' ? 'Inactive' : ['active', 'expiring_soon'].includes(displayStatus) ? 'Active' : 'Ended';
-  return { ...c, contractNumber: c.contractNumber ?? `CT-${c.id}`, displayStatus, state, daysLeft };
+  // the signing link is only shown while the contract is waiting for the employee's signature
+  const signatureRequest = c.signatureRequest && { ...c.signatureRequest, token: c.signatureRequest.status === 'sent' ? c.signatureRequest.token : null };
+  return { ...c, signatureRequest, contractNumber: c.contractNumber ?? `CT-${c.id}`, displayStatus, state, daysLeft };
 }
 
 async function nextContractNumber(tx: Prisma.TransactionClient) {
@@ -68,11 +79,11 @@ export async function getById(id: number) {
   return present(c, await alertDays());
 }
 
-// Employee self-service: own current contract + history, without salary figures (payroll is HR-only)
+// Employee self-service: own current contract + history, without salary figures or package terms (payroll is HR-only)
 export async function mine(user: AuthUser) {
   if (!user.employeeId) throw new HttpError(400, 'Your account is not linked to an employee record');
   const rows = await list({ employeeId: user.employeeId });
-  return rows.map(({ basicSalary: _b, housingAllowance: _h, transportAllowance: _t, currency: _c, ...rest }) => rest);
+  return rows.map(({ basicSalary: _b, housingAllowance: _h, transportAllowance: _t, currency: _c, terms: _terms, ...rest }) => rest);
 }
 
 // BR-4.10: a new contract becomes the single active one; the previous active contract is marked "renewed"
@@ -93,6 +104,14 @@ export async function create(input: CreateContractInput, user: AuthUser, ip: str
   }
 
   const previous = await prisma.contract.findFirst({ where: { employeeId: emp.id, status: 'active' } });
+  const company = await getCompany();
+  const terms: ContractTerms = {
+    employingEntity: input.employingEntity ?? company.name,
+    probationMonths: input.probationMonths,
+    noticeDays: input.noticeDays,
+    annualLeaveDays: input.annualLeaveDays,
+    items: input.items,
+  };
 
   const contract = await prisma.$transaction(async (tx) => {
     if (previous) await tx.contract.update({ where: { id: previous.id }, data: { status: 'renewed' } });
@@ -101,6 +120,8 @@ export async function create(input: CreateContractInput, user: AuthUser, ip: str
         employeeId: emp.id,
         contractNumber: await nextContractNumber(tx),
         contractType: input.contractType,
+        title: input.title ?? DEFAULT_TITLE[input.contractType],
+        terms: terms as unknown as Prisma.InputJsonValue,
         jobTitle: input.jobTitle ?? emp.jobTitle,
         startDate: input.startDate,
         endDate: input.endDate ?? null,
@@ -131,6 +152,59 @@ export async function create(input: CreateContractInput, user: AuthUser, ip: str
     return c;
   });
   return present(contract, await alertDays());
+}
+
+// ───── English contract PDF ─────
+
+async function buildPdf(c: ContractRow) {
+  if (c.contractType === 'internship') throw new HttpError(400, 'The English contract covers unlimited and limited employment contracts');
+  const [emp, settings, company] = await Promise.all([
+    prisma.employee.findUniqueOrThrow({ where: { id: c.employeeId }, select: { fullNamePassport: true, nationality: true, cprNumber: true } }),
+    getSettings(),
+    getCompany(),
+  ]);
+  // contracts created before the terms were stored fall back to the standard terms
+  const stored = (c.terms ?? {}) as unknown as Partial<ContractTerms>;
+  const buffer = await contractPdf({
+    contract: c,
+    terms: { employingEntity: company.name, probationMonths: 3, noticeDays: 30, annualLeaveDays: 30, items: [], ...stored },
+    employee: emp,
+    company,
+    signatory: { name: settings.ceoName, title: settings.ceoTitle },
+  });
+  const safeName = `${c.contractNumber ?? `CT-${c.id}`}-${c.employee.lastName}`.replace(/[^\w.-]+/g, '_');
+  return { buffer, fileName: `${safeName}.pdf` };
+}
+
+export async function pdf(id: number) {
+  const c = await prisma.contract.findUnique({ where: { id }, include: contractInclude });
+  if (!c) throw new HttpError(404, 'Contract not found');
+  return buildPdf(c);
+}
+
+// The employee signs the PDF through the link HR sends (same signing flow as the other documents)
+export async function sendForSignature(id: number, user: AuthUser, ip: string | null) {
+  const c = await prisma.contract.findUnique({ where: { id }, include: contractInclude });
+  if (!c) throw new HttpError(404, 'Contract not found');
+  if (c.status !== 'active') throw new HttpError(400, `Only an active contract can be sent for signature (this one is ${c.status})`);
+  if (c.signatureRequest?.status === 'sent') throw new HttpError(400, 'This contract is already waiting for the employee to sign');
+  if (c.signatureRequest?.status === 'signed') throw new HttpError(400, 'This contract is already signed');
+
+  const { buffer, fileName } = await buildPdf(c);
+  const updated = await prisma.$transaction(async (tx) => {
+    const request = await createDocumentRequest(tx, {
+      employeeId: c.employeeId,
+      kind: 'contract',
+      title: `${c.title ?? 'Employment contract'} (${c.contractNumber ?? `CT-${c.id}`})`,
+      pdf: buffer,
+      fileName,
+      createdByUserId: user.id,
+    });
+    await tx.contract.update({ where: { id }, data: { signatureRequestId: request.id } });
+    await logAudit({ actorUserId: user.id, action: 'contract.send', entity: 'Contract', entityId: id, changes: { request: request.id }, ip }, tx);
+    return tx.contract.findUniqueOrThrow({ where: { id }, include: contractInclude });
+  });
+  return present(updated, await alertDays());
 }
 
 async function closeContract(id: number, status: 'expired' | 'terminated', reason: string | null, user: AuthUser, ip: string | null) {
