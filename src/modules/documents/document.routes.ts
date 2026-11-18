@@ -14,6 +14,7 @@ router.get('/me', c.mine);                                   // before '/:id'
 router.get('/', requirePermission('document:view'), c.list);
 router.get('/:id', c.getById);                               // access checked in the service
 router.get('/:id/download', c.download);
+router.post('/remind/:employeeId', requirePermission('document:upload'), c.remind);
 router.delete('/:id', requirePermission('document:delete'), c.remove);
 
 export default router;

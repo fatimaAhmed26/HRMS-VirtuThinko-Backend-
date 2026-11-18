@@ -48,3 +48,11 @@ export const remove = asyncHandler(async (req, res) => {
   await service.remove(idParam(req), req.user!, ip(req));
   res.status(204).end();
 });
+
+export const remind = asyncHandler(async (req, res) => {
+  const employeeId = Number(req.params.employeeId);
+  if (!Number.isInteger(employeeId) || employeeId <= 0) throw new HttpError(400, 'Invalid employee id');
+  await assertEmployee(req.user!, employeeId);
+  await service.remindDocuments(employeeId, req.user!, ip(req));
+  res.json({ ok: true });
+});

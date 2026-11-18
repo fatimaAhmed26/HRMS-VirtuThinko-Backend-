@@ -17,6 +17,7 @@ const PERMISSIONS: Record<string, string[]> = {
   document:     ['view', 'upload', 'delete'],
   request:      ['view', 'create', 'process'],
   announcement: ['view', 'manage'],
+  asset:        ['view', 'manage'],
   report:       ['view', 'export'],
   user:         ['view', 'manage'],
   role:         ['view', 'manage'],
@@ -39,7 +40,7 @@ const ROLES: Record<string, { description: string; perms: string[] }> = {
     description: 'Day-to-day HR operations',
     perms: [
       'employee:view', 'employee:create', 'employee:edit',
-      ...all('leave'), ...all('document'), ...all('request'), ...all('announcement'),
+      ...all('leave'), ...all('document'), ...all('request'), ...all('announcement'), ...all('asset'),
       'contract:view', 'department:view', 'report:view',
     ],
   },

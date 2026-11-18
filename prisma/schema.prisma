@@ -257,6 +257,7 @@ model Employee {
   dependants          Dependant[]
   qualifications      Qualification[]
   previousEmployments PreviousEmployment[]
+  assetAssignments    AssetAssignment[]
 
   @@map("employees")
 }
@@ -488,6 +489,44 @@ model Contract {
   @@index([employeeId, status])
   @@index([endDate])
   @@map("contracts")
+}
+
+// ─────────── Company assets ───────────
+
+model Asset {
+  id        Int      @id @default(autoincrement()) @map("asset_id")
+  tag       String   @unique @db.VarChar(20)                    // VT-LAP-0001, generated
+  category  String   @db.VarChar(20)                            // laptop | phone | monitor | access_card | car | other
+  name      String   @db.VarChar(100)
+  serial    String?  @db.VarChar(100)
+  condition String   @default("good") @map("item_condition") @db.VarChar(20) // good | fair | damaged
+  country   String   @db.VarChar(2)                              // BH | SA
+  notes     String?  @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  assignments AssetAssignment[]
+
+  @@index([country])
+  @@map("assets")
+}
+
+// One row each time an item is handed over; returnedAt is empty while the employee still has it
+model AssetAssignment {
+  id               Int       @id @default(autoincrement()) @map("asset_assignment_id")
+  assetId          Int       @map("asset_id")
+  employeeId       Int       @map("employee_id")
+  assignedByUserId Int       @map("assigned_by_user_id")
+  assignedAt       DateTime  @default(now()) @map("assigned_at")
+  returnedAt       DateTime? @map("returned_at")
+  returnCondition  String?   @map("return_condition") @db.VarChar(20)
+
+  asset    Asset    @relation(fields: [assetId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, returnedAt])
+  @@index([assetId, returnedAt])
+  @@map("asset_assignments")
 }
 
 // ─────────── Payroll ───────────

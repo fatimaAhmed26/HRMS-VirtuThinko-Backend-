@@ -22,6 +22,7 @@ import auditRoutes from './modules/audit/audit.routes';
 import settingsRoutes from './modules/settings/settings.routes';
 import clientRoutes from './modules/clients/client.routes';
 import scannerRoutes from './modules/scanner/scanner.routes';
+import assetRoutes from './modules/assets/asset.routes';
 import { HttpError } from './utils/httpError';
 import { CLIENT_URL } from './config/env';
 
@@ -55,6 +56,7 @@ app.use('/api/audit', auditRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/scanner', scannerRoutes);
+app.use('/api/assets', assetRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {

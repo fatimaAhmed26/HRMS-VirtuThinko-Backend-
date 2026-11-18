@@ -134,6 +134,32 @@ export async function prepareDownload(id: number, user: AuthUser, ip: string | n
   return { storedName: doc.storedName, originalName: doc.originalName, mimeType: doc.mimeType };
 }
 
+// Tells the employee's portal login that documents are still outstanding. At most once per employee per day.
+export async function remindDocuments(employeeId: number, user: AuthUser, ip: string | null) {
+  const employee = await prisma.employee.findUnique({ where: { id: employeeId }, select: { user: { select: { id: true } } } });
+  if (!employee) throw new HttpError(404, 'Employee not found');
+  if (!employee.user) throw new HttpError(400, 'This employee has no portal login, so they cannot be reminded');
+  const userId = employee.user.id;
+
+  const dedupeKey = `docs-remind:${employeeId}:${new Date().toISOString().slice(0, 10)}`;
+  if (await prisma.notification.findUnique({ where: { dedupeKey }, select: { id: true } })) {
+    throw new HttpError(409, 'The employee was already reminded today');
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.notification.create({
+      data: {
+        userId,
+        type: 'document',
+        title: 'Documents still waiting',
+        body: 'HR asked you to upload the documents that are still outstanding. Check My documents.',
+        dedupeKey,
+      },
+    });
+    await logAudit({ actorUserId: user.id, action: 'document.remind', entity: 'Employee', entityId: employeeId, ip }, tx);
+  });
+}
+
 // Soft delete: hidden everywhere, file kept on disk for the retention period
 export async function remove(id: number, user: AuthUser, ip: string | null) {
   const doc = await findActive(id);
