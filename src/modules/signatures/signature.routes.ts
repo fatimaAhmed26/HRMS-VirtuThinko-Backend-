@@ -5,7 +5,7 @@ import { parse } from '../../utils/validate';
 import { HttpError } from '../../utils/httpError';
 import { filePath } from '../../utils/fileStorage';
 import * as service from './signature.service';
-import { createSignatureSchema, employeeQuerySchema, signSchema } from './signature.schema';
+import { employeeQuerySchema, signSchema } from './signature.schema';
 
 function idOf(value: unknown, label: string): number {
   const id = Number(value);
@@ -26,18 +26,6 @@ signatureRouter.use(authenticate);
 signatureRouter.get('/', requirePermission('document:view'), asyncHandler(async (req, res) => {
   const { employeeId } = parse(employeeQuerySchema, req.query);
   res.json(await service.list(employeeId, req.user!));
-}));
-
-signatureRouter.post('/', requirePermission('document:upload'), asyncHandler(async (req, res) => {
-  const input = parse(createSignatureSchema, req.body ?? {});
-  res.status(201).json(await service.create(input, req.user!, req.ip ?? null));
-}));
-
-signatureRouter.get('/:id/signed-pdf', requirePermission('document:view'), asyncHandler(async (req, res) => {
-  const file = await service.signedPdf(idOf(req.params.id, 'signature id'), req.user!, req.ip ?? null);
-  res.setHeader('Cache-Control', 'private, no-store');
-  res.attachment(file.fileName);
-  res.send(file.pdf);
 }));
 
 signatureRouter.post('/:id/cancel', requirePermission('document:upload'), asyncHandler(async (req, res) => {

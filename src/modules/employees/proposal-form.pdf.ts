@@ -1,7 +1,6 @@
 // Proposal acceptance form (Polytechnic template) on the company letterhead; signed by hand after printing
 import { pdfToBuffer } from '../../utils/pdf';
 import { FONT, FONT_BOLD, LETTER_LEFT, LETTER_RIGHT, useLetterhead } from '../../utils/letterhead';
-import { drawSignatureBlock, SIGNATURE_BLOCK_HEIGHT, type SignatureStamp } from '../../utils/signatureBlock';
 
 export interface ProposalFormData {
   date: string;
@@ -15,7 +14,6 @@ export interface ProposalFormData {
   projectSummary: string | null;
   signatoryName: string;
   signatoryTitle: string;
-  signature?: SignatureStamp; // added on the signed copy only
 }
 
 export const MAJORS = ['Database', 'MIS', 'Cyber Security', 'Networking', 'Programming'];
@@ -92,7 +90,6 @@ export function renderProposalForm(d: ProposalFormData) {
       y += 6;
     }
 
-    const stampY = y + 20; // the intern's block sits between the statements and the signature lines
     y = Math.max(y + 50, 640);
     const half = WIDTH / 2 - 15;
     doc.moveTo(LEFT, y).lineTo(LEFT + half, y).moveTo(RIGHT - half, y).lineTo(RIGHT, y).stroke();
@@ -100,9 +97,5 @@ export function renderProposalForm(d: ProposalFormData) {
     doc.font(FONT).fontSize(9.5).text('Industry mentor', LEFT, y + 19, { width: half });
     doc.font(FONT_BOLD).fontSize(10.5).text(d.signatoryName, RIGHT - half, y + 5, { width: half });
     doc.font(FONT).fontSize(9.5).text(d.signatoryTitle, RIGHT - half, y + 19, { width: half });
-    if (d.signature) {
-      if (stampY + SIGNATURE_BLOCK_HEIGHT <= y - 12) drawSignatureBlock(doc, d.signature, LEFT, stampY);
-      else { doc.addPage(); drawSignatureBlock(doc, d.signature, LEFT, 130); }
-    }
   }, { margin: 0, info: { Title: `Proposal Acceptance Form - ${d.studentName}` } });
 }

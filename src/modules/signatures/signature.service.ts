@@ -1,63 +1,18 @@
-import crypto from 'crypto';
-import fs from 'fs/promises';
-import { Prisma } from '@prisma/client';
 import prisma from '../../config/prisma';
 import { HttpError } from '../../utils/httpError';
 import { logAudit } from '../../utils/audit';
 import { assertEmployee } from '../../utils/scope';
-import { detectFileType, filePath, saveFile } from '../../utils/fileStorage';
-import { longDate } from '../../utils/letterhead';
-import type { SignatureStamp } from '../../utils/signatureBlock';
-import { acceptanceLetter, proposalForm } from '../employees/acceptance-letter.service';
-import { renderAcceptanceLetter, type AcceptanceLetterData } from '../employees/acceptance-letter.pdf';
-import { renderProposalForm, type ProposalFormData } from '../employees/proposal-form.pdf';
+import { detectFileType, saveFile } from '../../utils/fileStorage';
 import type { AuthUser } from '../../types/express';
-import type { CreateSignatureInput, SignInput } from './signature.schema';
+import type { SignInput } from './signature.schema';
 
-const EXPIRY_MS = 14 * 86_400_000;
 // The JSON body limit is 100 kB, so a signature image above this size can't arrive anyway
 const MAX_SIGNATURE_BYTES = 64 * 1024;
-
-const TITLES: Record<CreateSignatureInput['kind'], string> = {
-  'acceptance-letter': 'Internship acceptance letter',
-  'proposal-form': 'Proposal acceptance form',
-};
 
 const listSelect = {
   id: true, employeeId: true, kind: true, title: true, status: true, token: true,
   createdAt: true, expiresAt: true, signedAt: true, signerName: true,
 } as const;
-
-// Generates the document now and stores it, so the signer signs exactly what HR sent
-export async function create(input: CreateSignatureInput, user: AuthUser, ip: string | null) {
-  await assertEmployee(user, input.employeeId);
-  const actor = { userId: user.id, ip };
-  const letter = input.kind === 'acceptance-letter'
-    ? await acceptanceLetter(input.employeeId, {}, actor)
-    : await proposalForm(input.employeeId, actor);
-  const documentStoredName = await saveFile(letter.pdf, '.pdf');
-
-  const row = await prisma.signatureRequest.create({
-    data: {
-      employeeId: input.employeeId,
-      kind: input.kind,
-      title: TITLES[input.kind],
-      token: crypto.randomBytes(32).toString('hex'),
-      documentStoredName,
-      documentName: letter.fileName,
-      documentSha256: crypto.createHash('sha256').update(letter.pdf).digest('hex'),
-      expiresAt: new Date(Date.now() + EXPIRY_MS),
-      createdByUserId: user.id,
-      renderData: letter.data as unknown as Prisma.InputJsonValue,
-    },
-    select: listSelect,
-  });
-  await logAudit({
-    actorUserId: user.id, action: 'signature.send', entity: 'Employee', entityId: input.employeeId,
-    changes: { request: row.id, kind: input.kind }, ip,
-  });
-  return row;
-}
 
 export async function list(employeeId: number, user: AuthUser) {
   await assertEmployee(user, employeeId);
@@ -80,36 +35,6 @@ export async function cancel(id: number, user: AuthUser, ip: string | null) {
     await logAudit({ actorUserId: user.id, action: 'signature.cancel', entity: 'Employee', entityId: current.employeeId, changes: { request: id }, ip }, tx);
     return { ...(await tx.signatureRequest.findUniqueOrThrow({ where: { id }, select: listSelect })), token: null };
   });
-}
-
-// The signed copy: the sent document, re-rendered from the same data, with the signature drawn on
-export async function signedPdf(id: number, user: AuthUser, ip: string | null) {
-  const row = await prisma.signatureRequest.findUnique({
-    where: { id },
-    select: {
-      employeeId: true, kind: true, status: true, renderData: true, documentName: true,
-      signedAt: true, signerName: true, signatureStoredName: true,
-    },
-  });
-  if (!row) throw new HttpError(404, 'Signature request not found');
-  await assertEmployee(user, row.employeeId);
-  if (row.status !== 'signed' || !row.signatureStoredName || !row.signedAt) {
-    throw new HttpError(400, 'The signed copy is only available once the document is signed');
-  }
-  if (!row.renderData) throw new HttpError(409, 'This request was sent before signed copies were kept. Send a new request to get one');
-
-  const stamp: SignatureStamp = {
-    image: await fs.readFile(filePath(row.signatureStoredName)),
-    signerName: row.signerName ?? '',
-    signedOn: longDate(row.signedAt),
-  };
-  const data = row.renderData as Record<string, unknown>;
-  const pdf = row.kind === 'acceptance-letter'
-    ? await renderAcceptanceLetter({ ...(data as unknown as AcceptanceLetterData), signature: stamp })
-    : await renderProposalForm({ ...(data as unknown as ProposalFormData), signature: stamp });
-
-  await logAudit({ actorUserId: user.id, action: 'signature.download', entity: 'Employee', entityId: row.employeeId, changes: { request: id }, ip });
-  return { pdf, fileName: `Signed_${row.documentName}` };
 }
 
 // ───── public: the employee opens the link, no sign-in ─────
@@ -168,13 +93,6 @@ export async function publicSign(token: string, input: SignInput, ip: string | n
     });
     if (result.count === 0) throw new HttpError(409, 'This document is already signed');
 
-    // the acceptance letter's signed date is the same field HR used to tick by hand
-    if (row.kind === 'acceptance-letter') {
-      await tx.employee.update({
-        where: { id: row.employeeId },
-        data: { letterSignedAt: new Date(signedAt.toISOString().slice(0, 10)) },
-      });
-    }
     await logAudit({
       actorUserId: null, action: 'signature.sign', entity: 'Employee', entityId: row.employeeId,
       changes: { request: row.id, kind: row.kind, signer: input.signerName }, ip,

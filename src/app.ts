@@ -24,6 +24,7 @@ import clientRoutes from './modules/clients/client.routes';
 import scannerRoutes from './modules/scanner/scanner.routes';
 import assetRoutes from './modules/assets/asset.routes';
 import { signatureRouter, publicSignatureRouter } from './modules/signatures/signature.routes';
+import { onboardingRouter, publicOnboardingRouter } from './modules/onboarding/onboarding.routes';
 import { HttpError } from './utils/httpError';
 import { CLIENT_URL } from './config/env';
 
@@ -60,6 +61,8 @@ app.use('/api/scanner', scannerRoutes);
 app.use('/api/assets', assetRoutes);
 app.use('/api/signatures', signatureRouter);
 app.use('/api/public/signatures', publicSignatureRouter); // no sign-in: the token in the link is the key
+app.use('/api/onboarding-links', onboardingRouter);
+app.use('/api/public/onboarding', publicOnboardingRouter); // no sign-in: the token in the link is the key
 
 // 404 handler
 app.use((_req: Request, res: Response) => {

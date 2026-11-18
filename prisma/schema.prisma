@@ -549,7 +549,6 @@ model SignatureRequest {
   signerName          String?   @map("signer_name") @db.VarChar(150)
   signerIp            String?   @map("signer_ip") @db.VarChar(45)
   signatureStoredName String?   @map("signature_stored_name") @db.VarChar(100)
-  renderData          Json?     @map("render_data") // the letter's data as sent, so the signed copy re-renders the same
 
   employee Employee @relation(fields: [employeeId], references: [id])
 
@@ -736,4 +735,19 @@ model Announcement {
 
   @@index([publishAt])
   @@map("announcements")
+}
+
+model OnboardingLink {
+  id              Int       @id @default(autoincrement()) @map("onboarding_link_id")
+  token           String    @unique @db.VarChar(64)           // 32 random bytes, in the link
+  status          String    @default("sent") @db.VarChar(20)  // sent | submitted | cancelled
+  createdByUserId Int       @map("created_by_user_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  expiresAt       DateTime  @map("expires_at")
+  submittedAt     DateTime? @map("submitted_at")
+  submittedIp     String?   @map("submitted_ip") @db.VarChar(45)
+  answers         Json?
+  files           Json?     // checklist key -> { storedName, name }
+
+  @@map("onboarding_links")
 }

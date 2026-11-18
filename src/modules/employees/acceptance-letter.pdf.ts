@@ -3,7 +3,6 @@
 // Positions are in PDF points (A4 = 595 x 842) and were measured from the original letter.
 import { pdfToBuffer } from '../../utils/pdf';
 import { FONT, FONT_BOLD, LETTER_LEFT, LETTER_RIGHT, useLetterhead } from '../../utils/letterhead';
-import { drawSignatureBlock, type SignatureStamp } from '../../utils/signatureBlock';
 
 export interface AcceptanceLetterData {
   date: string;          // "September 7, 2026"
@@ -18,7 +17,6 @@ export interface AcceptanceLetterData {
   duration: string;      // "12 Weeks"
   signatoryName: string;
   signatoryTitle: string;
-  signature?: SignatureStamp; // added on the signed copy only
 }
 
 const LEFT = LETTER_LEFT;
@@ -92,6 +90,5 @@ export function renderAcceptanceLetter(d: AcceptanceLetterData) {
     doc.text(d.signatoryName, LEFT, 533.7 - UP, { lineBreak: false });
     doc.text(d.signatoryTitle, LEFT, 548.3 - UP, { lineBreak: false });
     // (no signature or stamp: the space below is left empty for signing by hand)
-    if (d.signature) drawSignatureBlock(doc, d.signature, LEFT, 600);
   }, { margin: 0, info: { Title: `Internship Acceptance Letter - ${d.fullName}` } });
 }
