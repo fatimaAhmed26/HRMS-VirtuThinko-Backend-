@@ -258,6 +258,7 @@ model Employee {
   qualifications      Qualification[]
   previousEmployments PreviousEmployment[]
   assetAssignments    AssetAssignment[]
+  signatureRequests   SignatureRequest[]
 
   @@map("employees")
 }
@@ -527,6 +528,32 @@ model AssetAssignment {
   @@index([employeeId, returnedAt])
   @@index([assetId, returnedAt])
   @@map("asset_assignments")
+}
+
+// A document HR sent to an employee or intern to sign. The PDF is stored when it is sent, so the
+// signer signs exactly that version. The sign link carries the token; no login is needed to open it.
+model SignatureRequest {
+  id                  Int       @id @default(autoincrement()) @map("signature_request_id")
+  employeeId          Int       @map("employee_id")
+  kind                String    @db.VarChar(30)                   // acceptance-letter | proposal-form
+  title               String    @db.VarChar(150)
+  token               String    @unique @db.VarChar(64)           // 32 random bytes, in the link
+  status              String    @default("sent") @db.VarChar(20)  // sent | signed | cancelled
+  documentStoredName  String    @map("document_stored_name") @db.VarChar(100)
+  documentName        String    @map("document_name") @db.VarChar(255)
+  documentSha256      String    @map("document_sha256") @db.VarChar(64)
+  expiresAt           DateTime  @map("expires_at")
+  createdByUserId     Int       @map("created_by_user_id")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  signedAt            DateTime? @map("signed_at")
+  signerName          String?   @map("signer_name") @db.VarChar(150)
+  signerIp            String?   @map("signer_ip") @db.VarChar(45)
+  signatureStoredName String?   @map("signature_stored_name") @db.VarChar(100)
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, status])
+  @@map("signature_requests")
 }
 
 // ─────────── Payroll ───────────
