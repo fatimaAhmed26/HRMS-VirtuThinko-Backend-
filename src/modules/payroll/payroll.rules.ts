@@ -109,6 +109,9 @@ export function socialInsurance(p: SiProfile, period: string): { employee: Contr
   return { employee: [], employer: [{ code: 'GOSI_HAZARD_ER', name: 'Occupational hazards', rate: 2 }] };
 }
 
+// Stable payslip code for a salary-package item, e.g. "Phone allowance" -> PHONE_ALLOWANCE
+export const itemCode = (label: string) => label.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+
 export function contributionBase(country: string, base: Prisma.Decimal) {
   const cap = D(CONTRIBUTION_CAP[country] ?? Number.MAX_SAFE_INTEGER);
   return Prisma.Decimal.min(base, cap);

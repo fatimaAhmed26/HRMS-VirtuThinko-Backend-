@@ -2,7 +2,8 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../../config/prisma';
 import { countDays, monthsOfService, toDateKey, type Tier } from '../leave/leave.rules';
-import { contributionBase, D, dailyRate, periodRange, prorationFactor, round, socialInsurance } from './payroll.rules';
+import { contributionBase, D, dailyRate, itemCode, periodRange, prorationFactor, round, socialInsurance } from './payroll.rules';
+import type { ContractTerms } from '../contracts/contract.schema';
 
 export interface LineItem {
   code: string;
@@ -70,6 +71,20 @@ export async function calculatePayslip(employeeId: number, period: string): Prom
     orderBy: { id: 'asc' },
   });
   const deductions: LineItem[] = [];
+  // monthly allowances and deductions from the contract's salary package (phone allowance, loan repayment, ...)
+  // yearly bonuses are paid on approval, so they are not part of the monthly payslip
+  if (!isIntern) {
+    const terms = (contract.terms ?? {}) as unknown as Partial<ContractTerms>;
+    for (const it of terms.items ?? []) {
+      if (it.paid !== 'monthly') continue;
+      const code = itemCode(it.label);
+      if (it.kind === 'allowance') {
+        earnings.push({ code, name: it.label, amount: money(D(it.amount).times(factor)), source: 'contract' });
+      } else if (it.kind === 'deduction') {
+        deductions.push({ code, name: it.label, amount: money(D(it.amount)), source: 'contract' });
+      }
+    }
+  }
   let contributoryExtra = D(0);
   for (const it of items) {
     const line: LineItem = { code: it.type.code, name: it.type.name, amount: money(it.amount), source: 'manual', note: it.reason ?? undefined };

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import * as c from './payroll.controller';
 import * as service from './payroll.service';
+import * as sheet from './payroll.sheet';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { HttpError } from '../../utils/httpError';
 import { authenticate, requirePermission } from '../../middleware/auth';
@@ -43,6 +44,17 @@ router.get('/payslips/:id/pdf', requirePermission('payroll:view'), c.payslipPdf)
 router.get('/runs', requirePermission('payroll:view'), c.listRuns);
 router.post('/runs', requirePermission('payroll:create'), c.createRun);
 router.get('/runs/:id', requirePermission('payroll:view'), c.getRun);
+// the run laid out like the payroll sheet (JSON for the screen, .xlsx for download)
+router.get('/runs/:id/sheet', requirePermission('payroll:view'), asyncHandler(async (req, res) => {
+  res.json(await sheet.runSheet(Number(req.params.id)));
+}));
+router.get('/runs/:id/sheet.xlsx', requirePermission('payroll:view'), asyncHandler(async (req, res) => {
+  const { buffer, fileName } = await sheet.runSheetExcel(Number(req.params.id));
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(buffer);
+}));
 router.post('/runs/:id/recalculate', requirePermission('payroll:edit'), c.recalculate);
 router.post('/runs/:id/submit', requirePermission('payroll:edit'), c.transition('submit'));
 router.post('/runs/:id/approve', requirePermission('payroll:approve'), c.transition('approve'));
