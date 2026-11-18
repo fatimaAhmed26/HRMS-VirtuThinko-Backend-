@@ -4,8 +4,8 @@ import { HttpError } from '../../utils/httpError';
 import { logAudit } from '../../utils/audit';
 import { getSettings } from '../../utils/settings';
 import { letterDate, longDate } from '../../utils/letterhead';
-import { renderAcceptanceLetter } from './acceptance-letter.pdf';
-import { renderProposalForm } from './proposal-form.pdf';
+import { renderAcceptanceLetter, type AcceptanceLetterData } from './acceptance-letter.pdf';
+import { renderProposalForm, type ProposalFormData } from './proposal-form.pdf';
 
 const WEEK_MS = 7 * 86_400_000;
 
@@ -35,7 +35,7 @@ export async function acceptanceLetter(employeeId: number, opts: LetterOptions, 
   const s = await getSettings();
   const fullName = `${emp.firstName} ${emp.lastName}`;
 
-  const pdf = await renderAcceptanceLetter({
+  const data: AcceptanceLetterData = {
     date: letterDate(opts.date ?? new Date()),
     fullName,
     firstName: emp.firstName,
@@ -48,10 +48,11 @@ export async function acceptanceLetter(employeeId: number, opts: LetterOptions, 
     duration: `${weeks} Week${weeks === 1 ? '' : 's'}`,
     signatoryName: s.ceoName,
     signatoryTitle: s.ceoTitle,
-  });
+  };
+  const pdf = await renderAcceptanceLetter(data);
 
   await logAudit({ actorUserId: actor.userId, action: 'employee.acceptance_letter', entity: 'Employee', entityId: employeeId, changes: { weeks }, ip: actor.ip });
-  return { pdf, fileName: `Internship_Acceptance_Letter-${fullName.replace(/[^\w\- ]/g, '').replace(/\s+/g, '_')}.pdf` };
+  return { pdf, data, fileName: `Internship_Acceptance_Letter-${fullName.replace(/[^\w\- ]/g, '').replace(/\s+/g, '_')}.pdf` };
 }
 
 export async function proposalForm(employeeId: number, actor: { userId: number; ip: string | null }) {
@@ -67,7 +68,7 @@ export async function proposalForm(employeeId: number, actor: { userId: number; 
   const s = await getSettings();
   const fullName = `${emp.firstName} ${emp.lastName}`;
 
-  const pdf = await renderProposalForm({
+  const data: ProposalFormData = {
     date: letterDate(new Date()),
     studentName: fullName,
     studentId: emp.studentId,
@@ -79,8 +80,9 @@ export async function proposalForm(employeeId: number, actor: { userId: number; 
     projectSummary: emp.projectSummary,
     signatoryName: s.ceoName,
     signatoryTitle: s.ceoTitle,
-  });
+  };
+  const pdf = await renderProposalForm(data);
 
   await logAudit({ actorUserId: actor.userId, action: 'employee.proposal_form', entity: 'Employee', entityId: employeeId, ip: actor.ip });
-  return { pdf, fileName: `Proposal_Acceptance_Form-${fullName.replace(/[^\w\- ]/g, '').replace(/\s+/g, '_')}.pdf` };
+  return { pdf, data, fileName: `Proposal_Acceptance_Form-${fullName.replace(/[^\w\- ]/g, '').replace(/\s+/g, '_')}.pdf` };
 }

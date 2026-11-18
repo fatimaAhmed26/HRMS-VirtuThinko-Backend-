@@ -549,6 +549,7 @@ model SignatureRequest {
   signerName          String?   @map("signer_name") @db.VarChar(150)
   signerIp            String?   @map("signer_ip") @db.VarChar(45)
   signatureStoredName String?   @map("signature_stored_name") @db.VarChar(100)
+  renderData          Json?     @map("render_data") // the letter's data as sent, so the signed copy re-renders the same
 
   employee Employee @relation(fields: [employeeId], references: [id])
 

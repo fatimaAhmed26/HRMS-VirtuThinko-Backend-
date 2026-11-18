@@ -33,6 +33,13 @@ signatureRouter.post('/', requirePermission('document:upload'), asyncHandler(asy
   res.status(201).json(await service.create(input, req.user!, req.ip ?? null));
 }));
 
+signatureRouter.get('/:id/signed-pdf', requirePermission('document:view'), asyncHandler(async (req, res) => {
+  const file = await service.signedPdf(idOf(req.params.id, 'signature id'), req.user!, req.ip ?? null);
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.attachment(file.fileName);
+  res.send(file.pdf);
+}));
+
 signatureRouter.post('/:id/cancel', requirePermission('document:upload'), asyncHandler(async (req, res) => {
   res.json(await service.cancel(idOf(req.params.id, 'signature id'), req.user!, req.ip ?? null));
 }));
